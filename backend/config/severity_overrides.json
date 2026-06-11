@@ -1,0 +1,11 @@
+{
+  "_description": "Client-specific severity classification overrides.",
+  "_format": "Map client_id -> rule_id -> new_classification string. The classification is parsed by extract_severity() to determine severity level.",
+  "_example": {
+    "client_acme": {
+      "RULE-SEC-001": "Warning - Relaxed severity for internal tools",
+      "RULE-SEC-008": "Informational - Username exposure acceptable"
+    }
+  },
+  "overrides": {}
+}

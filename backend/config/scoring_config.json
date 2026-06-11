@@ -1,0 +1,228 @@
+{
+  "_description": "Scoring configuration for Talend Health Audit Tool. All deduction weights, grade thresholds, categories, and maturity levels are defined here.",
+  "_format": "Top-level defaults provide baseline. category_weights override per severity level. maturity_levels provide alternative scoring models. client_overrides override per client.",
+  "defaults": {
+    "starting_score": 100,
+    "minimum_score": 0,
+    "maximum_score": 100,
+    "severity_deductions": {
+      "critical_risk": 10,
+      "risk": 5,
+      "warning": 2,
+      "advisory": 1,
+      "informational": 0
+    },
+    "grade_thresholds": [
+      { "min_score": 90, "grade": "Optimized" },
+      { "min_score": 80, "grade": "Healthy" },
+      { "min_score": 60, "grade": "Needs Improvement" },
+      { "min_score": 40, "grade": "At Risk" },
+      { "min_score": 0,  "grade": "Critical" }
+    ],
+    "categories": [
+      {
+        "key": "security",
+        "label": "Security",
+        "domain_aliases": ["security"],
+        "category_aliases": []
+      },
+      {
+        "key": "performance",
+        "label": "Performance",
+        "domain_aliases": ["performance"],
+        "category_aliases": []
+      },
+      {
+        "key": "maintainability",
+        "label": "Maintainability",
+        "domain_aliases": ["maintainability", "component"],
+        "category_aliases": ["maintainability", "component", "best_practice", "row_processing", "excessive_tjava"]
+      },
+      {
+        "key": "architecture",
+        "label": "Architecture",
+        "domain_aliases": ["architecture"],
+        "category_aliases": ["architecture", "nested_loops", "missing_parallelization", "heavy_tmap_usage"]
+      }
+    ]
+  },
+  "category_weights": {
+    "security": {
+      "critical_risk": 10,
+      "risk": 5,
+      "warning": 2,
+      "advisory": 1,
+      "informational": 0
+    },
+    "performance": {
+      "critical_risk": 10,
+      "risk": 5,
+      "warning": 2,
+      "advisory": 1,
+      "informational": 0
+    },
+    "maintainability": {
+      "critical_risk": 10,
+      "risk": 5,
+      "warning": 2,
+      "advisory": 1,
+      "informational": 0
+    },
+    "architecture": {
+      "critical_risk": 10,
+      "risk": 5,
+      "warning": 2,
+      "advisory": 1,
+      "informational": 0
+    }
+  },
+  "maturity_levels": [
+    {
+      "name": "standard",
+      "description": "Balanced scoring model suitable for most organizations.",
+      "grade_thresholds": [
+        { "min_score": 90, "grade": "Optimized" },
+        { "min_score": 80, "grade": "Healthy" },
+        { "min_score": 60, "grade": "Needs Improvement" },
+        { "min_score": 40, "grade": "At Risk" },
+        { "min_score": 0,  "grade": "Critical" }
+      ],
+      "severity_deductions": {
+        "critical_risk": 10,
+        "risk": 5,
+        "warning": 2,
+        "advisory": 1,
+        "informational": 0
+      }
+    },
+    {
+      "name": "strict",
+      "description": "Higher deductions for risk and warning findings. Suitable for regulated industries.",
+      "grade_thresholds": [
+        { "min_score": 95, "grade": "Optimized" },
+        { "min_score": 85, "grade": "Healthy" },
+        { "min_score": 65, "grade": "Needs Improvement" },
+        { "min_score": 30, "grade": "At Risk" },
+        { "min_score": 0,  "grade": "Critical" }
+      ],
+      "severity_deductions": {
+        "critical_risk": 15,
+        "risk": 8,
+        "warning": 4,
+        "advisory": 1,
+        "informational": 0
+      }
+    },
+    {
+      "name": "lenient",
+      "description": "Lower deductions for all severities. Suitable for internal or early-stage projects.",
+      "grade_thresholds": [
+        { "min_score": 80, "grade": "Optimized" },
+        { "min_score": 60, "grade": "Healthy" },
+        { "min_score": 40, "grade": "Needs Improvement" },
+        { "min_score": 20, "grade": "At Risk" },
+        { "min_score": 0,  "grade": "Critical" }
+      ],
+      "severity_deductions": {
+        "critical_risk": 5,
+        "risk": 3,
+        "warning": 1,
+        "advisory": 0,
+        "informational": 0
+      }
+    },
+    {
+      "name": "security_focused",
+      "description": "Strict deductions for security findings, standard for others.",
+      "grade_thresholds": [
+        { "min_score": 90, "grade": "Optimized" },
+        { "min_score": 80, "grade": "Healthy" },
+        { "min_score": 60, "grade": "Needs Improvement" },
+        { "min_score": 40, "grade": "At Risk" },
+        { "min_score": 0,  "grade": "Critical" }
+      ],
+      "category_weights": {
+        "security": {
+          "critical_risk": 15,
+          "risk": 8,
+          "warning": 4,
+          "advisory": 1,
+          "informational": 0
+        }
+      },
+      "severity_deductions": {
+        "critical_risk": 10,
+        "risk": 5,
+        "warning": 2,
+        "advisory": 1,
+        "informational": 0
+      }
+    }
+  ],
+  "client_overrides": {
+    "_example": {
+      "client_acme": {
+        "maturity_level": "strict",
+        "category_weights": {
+          "security": { "critical_risk": 20, "risk": 10, "warning": 5, "advisory": 1, "informational": 0 }
+        },
+        "grade_thresholds": [
+          { "min_score": 95, "grade": "Platinum" },
+          { "min_score": 85, "grade": "Gold" },
+          { "min_score": 70, "grade": "Silver" },
+          { "min_score": 50, "grade": "Bronze" },
+          { "min_score": 0,  "grade": "Critical" }
+        ]
+      }
+    }
+  },
+  "compliance": {
+    "description": "Compliance scoring configuration. Category score = (Passed Rules / Total Applicable Rules) * 100.",
+    "rule_prefixes": {
+      "security": ["RULE-SEC"],
+      "performance": ["RULE-PERF"],
+      "maintainability": ["RULE-COMP"],
+      "architecture": ["RULE-ARCH"]
+    },
+    "default_maturity": "standard",
+    "maturity_levels": {
+      "standard": {
+        "description": "Standard compliance maturity model.",
+        "grade_thresholds": [
+          { "min_score": 90, "grade": "Optimized" },
+          { "min_score": 80, "grade": "Healthy" },
+          { "min_score": 60, "grade": "Needs Improvement" },
+          { "min_score": 40, "grade": "At Risk" },
+          { "min_score": 0,  "grade": "Critical" }
+        ]
+      },
+      "strict": {
+        "description": "Stricter thresholds for regulated environments.",
+        "grade_thresholds": [
+          { "min_score": 95, "grade": "Optimized" },
+          { "min_score": 85, "grade": "Healthy" },
+          { "min_score": 65, "grade": "Needs Improvement" },
+          { "min_score": 40, "grade": "At Risk" },
+          { "min_score": 0,  "grade": "Critical" }
+        ]
+      }
+    },
+    "client_overrides": {
+      "_example": {
+        "client_acme": {
+          "maturity": "strict",
+          "category_rules": {
+            "security": ["RULE-SEC-001", "RULE-SEC-002", "RULE-SEC-005"]
+          },
+          "grade_thresholds": [
+            { "min_score": 98, "grade": "Platinum" },
+            { "min_score": 90, "grade": "Gold" },
+            { "min_score": 75, "grade": "Silver" },
+            { "min_score": 50, "grade": "Bronze" },
+            { "min_score": 0,  "grade": "Critical" }
+          ]
+        }
+      }
+    }
+  }
+}

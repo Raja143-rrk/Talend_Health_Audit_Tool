@@ -1,0 +1,18 @@
+{
+  "_description": "Classification keyword mappings for the RAG knowledge base. Defines how classification text is parsed to determine severity and category.",
+  "severity_keywords": [
+    { "keyword": "critical risk", "severity": "critical_risk" },
+    { "keyword": "risk",           "severity": "risk" },
+    { "keyword": "warning",        "severity": "warning" },
+    { "keyword": "advisory",       "severity": "advisory" },
+    { "keyword": "informational",  "severity": "informational" }
+  ],
+  "category_map": {
+    "security":       "security",
+    "performance":    "performance",
+    "maintainability":"component",
+    "architecture":   "architecture"
+  },
+  "severity_default":   "informational",
+  "category_default":   "unknown"
+}
