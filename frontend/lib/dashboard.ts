@@ -70,6 +70,7 @@ export type DashboardFinding = {
   owner: string;
   impact: string;
   recommendation: string;
+  subjob_name?: string | null;
   remediation?: string | null;
   evidence: Record<string, unknown>;
 };
@@ -98,11 +99,17 @@ export type DashboardOverview = {
   summary: {
     project_name: string;
     environment: string;
+    total_jobs: number;
+    job_names: string[];
     compliance_score: number;
     compliance_grade: string;
     last_analyzed_at: string;
     metrics: DashboardMetric[];
     score_breakdown: ScoreBreakdown;
+    total_subjobs?: number;
+    total_master_jobs?: number;
+    subjob_names?: string[];
+    master_job_names?: string[];
   };
   recommendations: {
     total: number;
@@ -132,9 +139,14 @@ export type DashboardOverview = {
 
 export async function getDashboardOverview(
   analysisId: string,
+  jobName?: string,
 ): Promise<DashboardOverview> {
+  const params = new URLSearchParams({ analysis_id: analysisId });
+  if (jobName) {
+    params.set("job_name", jobName);
+  }
   const response = await fetch(
-    `${appConfig.apiBaseUrl.replace(/\/$/, "")}/dashboard?analysis_id=${encodeURIComponent(analysisId)}`,
+    `${appConfig.apiBaseUrl.replace(/\/$/, "")}/dashboard?${params.toString()}`,
     { cache: "no-store" },
   );
 

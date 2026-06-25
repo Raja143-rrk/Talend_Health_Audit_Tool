@@ -18,7 +18,7 @@ Replaced the legacy 5-level severity model (Critical/High/Medium/Low/Info) with 
 ### 3. RAG Markdown Documents (4 files updated)
 | File | Changes |
 |------|---------|
-| `backend/rag/security/findings.md` | Remapped all 7 RULE-SEC-* classifications; added RULE-SEC-008 (Hardcoded Username → Warning) |
+| `backend/rag/security/findings.md` | Remapped all 7 RULE-SEC-* classifications; added RULE-SEC-007 (Hardcoded Username → Warning) |
 | `backend/rag/performance/findings.md` | Remapped all 9 RULE-PERF-* classifications (HIGH→Risk, MEDIUM→Warning, LOW→Advisory) |
 | `backend/rag/maintainability/findings.md` | Remapped all 10 RULE-COMP-* classifications |
 | `backend/rag/architecture/findings.md` | Remapped all 11 RULE-ARCH-* classifications |
@@ -31,7 +31,7 @@ Replaced the legacy 5-level severity model (Critical/High/Medium/Low/Info) with 
 ### 5. Agents
 | File | Changes |
 |------|---------|
-| `agents/security_agent/scanner.py` | SCANNER_TO_RAG_RULE_MAP: SEC-USERNAME-001 → RULE-SEC-008 (Warning); recommendations use new severity strings |
+| `agents/security_agent/scanner.py` | SCANNER_TO_RAG_RULE_MAP: SEC-USERNAME-001 → RULE-SEC-007 (Warning); recommendations use new severity strings |
 | `agents/security_agent/rules.py` | Unchanged (no severity fields) |
 | `agents/performance_agent/analyzer.py` | Priority mapping updated: critical_risk→P1, risk→P2, warning/advisory/informational→P3 |
 | `agents/performance_agent/rules.py` | Unchanged (no severity fields) |
@@ -56,7 +56,7 @@ New file supporting:
   "overrides": {
     "client_acme": {
       "RULE-SEC-001": "Warning - Relaxed severity for internal tools",
-      "RULE-SEC-008": "Informational"
+      "RULE-SEC-007": "Informational"
     }
   }
 }
@@ -70,12 +70,11 @@ Usage: `resolve_severity("RULE-SEC-001", client_id="client_acme")` returns "warn
 |------|---------------|----------------|
 | RULE-SEC-001 | Risk | Hardcoded passwords |
 | RULE-SEC-002 | Risk | Inline JDBC URLs |
-| RULE-SEC-003 | Risk | High volume of security findings |
-| RULE-SEC-004 | Risk | Missing/unencrypted context variables |
-| RULE-SEC-005 | Critical Risk | API keys, tokens, secrets |
-| RULE-SEC-006 | Warning | Insecure DB connections |
-| RULE-SEC-007 | Warning | Cross-environment context exposure |
-| RULE-SEC-008 | Warning | Hardcoded usernames |
+| RULE-SEC-003 | Risk | Missing/unencrypted context variables |
+| RULE-SEC-004 | Critical Risk | API keys, tokens, secrets |
+| RULE-SEC-005 | Warning | Insecure DB connections |
+| RULE-SEC-006 | Warning | Cross-environment context exposure |
+| RULE-SEC-007 | Warning | Hardcoded usernames |
 
 ### Performance
 | Rule | Classification |
@@ -94,15 +93,13 @@ Usage: `resolve_severity("RULE-SEC-001", client_id="client_acme")` returns "warn
 | Rule | Classification |
 |------|---------------|
 | RULE-COMP-001 | Advisory (disabled component) |
-| RULE-COMP-002 | Warning (large job) |
+| RULE-COMP-002 (advisory) | Warning (large job) |
 | RULE-COMP-003 | Informational (naming convention) |
 | RULE-COMP-004 | Advisory (missing documentation) |
-| RULE-COMP-005 | Warning (error handling) |
-| RULE-COMP-006 | Warning (duplicate config) |
-| RULE-COMP-007 | Warning (missing reuse) |
-| RULE-COMP-008 | Warning (missing metadata) |
-| RULE-COMP-009 | Warning (missing context) |
-| RULE-COMP-010 | Advisory (unused items) |
+| RULE-COMP-005 (advisory) | Warning (duplicate config) |
+| RULE-COMP-006 | Warning (missing reuse) |
+| RULE-COMP-007 | Warning (missing context) |
+| RULE-COMP-008 | Advisory (unused items) |
 
 ### Architecture
 | Rule | Classification |

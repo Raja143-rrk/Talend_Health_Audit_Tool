@@ -25,9 +25,12 @@ def _dashboard_error(exc: Exception, detail: str) -> HTTPException:
 
 
 @router.get("", response_model=DashboardOverviewResponse)
-async def get_dashboard(analysis_id: str | None = None) -> DashboardOverviewResponse:
+async def get_dashboard(
+    analysis_id: str | None = None,
+    job_name: str | None = None,
+) -> DashboardOverviewResponse:
     try:
-        return dashboard_service.get_dashboard_overview(analysis_id)
+        return dashboard_service.get_dashboard_overview(analysis_id, job_name)
     except Exception as exc:
         raise _dashboard_error(exc, "Unable to load dashboard.") from exc
 
@@ -41,9 +44,12 @@ async def get_analysis_status(analysis_id: str | None = None) -> AnalysisStatusR
 
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
-async def get_dashboard_summary(analysis_id: str | None = None) -> DashboardSummaryResponse:
+async def get_dashboard_summary(
+    analysis_id: str | None = None,
+    job_name: str | None = None,
+) -> DashboardSummaryResponse:
     try:
-        return dashboard_service.get_dashboard_summary(analysis_id)
+        return dashboard_service.get_dashboard_summary(analysis_id, job_name)
     except Exception as exc:
         raise _dashboard_error(exc, "Unable to load dashboard summary.") from exc
 
@@ -57,32 +63,44 @@ async def get_chart_data(analysis_id: str | None = None) -> ChartDataResponse:
 
 
 @router.get("/findings/security", response_model=FindingsResponse)
-async def get_security_findings(analysis_id: str | None = None) -> FindingsResponse:
+async def get_security_findings(
+    analysis_id: str | None = None,
+    job_name: str | None = None,
+) -> FindingsResponse:
     try:
-        return dashboard_service.get_security_findings(analysis_id)
+        return dashboard_service.get_security_findings(analysis_id, job_name)
     except Exception as exc:
         raise _dashboard_error(exc, "Unable to load security findings.") from exc
 
 
 @router.get("/findings/performance", response_model=FindingsResponse)
-async def get_performance_findings(analysis_id: str | None = None) -> FindingsResponse:
+async def get_performance_findings(
+    analysis_id: str | None = None,
+    job_name: str | None = None,
+) -> FindingsResponse:
     try:
-        return dashboard_service.get_performance_findings(analysis_id)
+        return dashboard_service.get_performance_findings(analysis_id, job_name)
     except Exception as exc:
         raise _dashboard_error(exc, "Unable to load performance findings.") from exc
 
 
 @router.get("/recommendations", response_model=RecommendationsResponse)
-async def get_recommendations(analysis_id: str | None = None) -> RecommendationsResponse:
+async def get_recommendations(
+    analysis_id: str | None = None,
+    job_name: str | None = None,
+) -> RecommendationsResponse:
     try:
-        return dashboard_service.get_recommendations(analysis_id)
+        return dashboard_service.get_recommendations(analysis_id, job_name)
     except Exception as exc:
         raise _dashboard_error(exc, "Unable to load recommendations.") from exc
 
 
 @router.get("/components/drilldown", response_model=list[ComponentDrillDown])
-async def get_component_drilldown(analysis_id: str | None = None) -> list[ComponentDrillDown]:
+async def get_component_drilldown(
+    analysis_id: str | None = None,
+    job_name: str | None = None,
+) -> list[ComponentDrillDown]:
     try:
-        return dashboard_service.get_component_drilldown(analysis_id)
+        return dashboard_service.get_component_drilldown(analysis_id, job_name)
     except Exception as exc:
         raise _dashboard_error(exc, "Unable to load component drill-down.") from exc

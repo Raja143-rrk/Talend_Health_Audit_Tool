@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -17,9 +18,10 @@ from backend.api.routes.health import router as health_router
 from backend.api.routes.tasks import router as tasks_router
 from backend.api.routes.uploads import router as uploads_router
 from backend.core.exceptions import register_exception_handlers
-from backend.core.logging import configure_logging
+from backend.core.logging import configure_logging, get_logger
 
 configure_logging()
+logger = get_logger(__name__)
 
 app = FastAPI(title="Talend Health Analyzer API", version="0.1.0")
 
@@ -30,6 +32,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def timing_middleware(request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    response.headers["X-Process-Time"] = str(elapsed_ms)
+    logger.info(
+        "%s %s %s %dms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
+
 
 register_exception_handlers(app)
 

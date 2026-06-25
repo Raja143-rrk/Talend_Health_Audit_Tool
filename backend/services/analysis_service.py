@@ -29,6 +29,7 @@ class AnalysisRecord(BaseModel):
     task_id: str
     analysis_id: str
     upload_path: str
+    additional_upload_paths: list[str] = Field(default_factory=list)
     original_filename: str
     status: AnalysisRunStatus = AnalysisRunStatus.QUEUED
     current_agent: str | None = None
@@ -80,21 +81,22 @@ class AnalysisService:
         except Exception:
             logger.exception("Failed to load analysis records from disk, starting fresh")
 
-    def create_analysis(self, upload_path: str, original_filename: str) -> AnalysisRecord:
+    def create_analysis(self, upload_paths: list[str], original_filenames: list[str]) -> AnalysisRecord:
         task_id = f"task_{uuid.uuid4().hex}"
         analysis_id = f"analysis_{uuid.uuid4().hex}"
         record = AnalysisRecord(
             task_id=task_id,
             analysis_id=analysis_id,
-            upload_path=upload_path,
-            original_filename=original_filename,
+            upload_path=upload_paths[0] if upload_paths else "",
+            additional_upload_paths=upload_paths[1:],
+            original_filename=", ".join(original_filenames),
         )
         with self._lock:
             self._records[analysis_id] = record
             self._task_index[task_id] = analysis_id
             self._append_log(record, "info", "Analysis task queued")
             self._persist()
-        logger.info("Created analysis %s task %s for %s", analysis_id, task_id, original_filename)
+        logger.info("Created analysis %s task %s for %s", analysis_id, task_id, record.original_filename)
         return record
 
     async def run_analysis(self, analysis_id: str) -> None:
@@ -116,6 +118,7 @@ class AnalysisService:
             context = AgentContext(
                 analysis_id=record.analysis_id,
                 upload_path=record.upload_path,
+                additional_upload_paths=record.additional_upload_paths,
                 metadata={"original_filename": record.original_filename},
             )
             state = await workflow.run(context)

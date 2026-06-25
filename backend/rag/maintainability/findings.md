@@ -29,9 +29,9 @@
 
 **detection_logic:** Count all component nodes in the job XML. If the count exceeds 50, flag the job. Disabled components are included because they still contribute to complexity.
 
-**impact:** Large jobs are difficult to understand, test, and debug. They indicate the job is doing too much and should be decomposed into focused subjobs. Large jobs also have longer compilation times and are harder to migrate between environments. This is an active job-level maintainability finding with a 2-point deduction.
+**impact:** Large jobs are difficult to understand, test, and debug. They indicate the job is doing too much and should be decomposed into focused subjobs. Large jobs also have longer compilation times and are harder to migrate between environments. This is an active job-level maintainability finding with a 1-point deduction.
 
-**classification:** Warning — Moderate maintainability impact.
+**classification:** Advisory — Minor maintainability impact; design preference for decomposition.
 **remediation:** Analyze the job to identify distinct processing stages. Decompose by extracting each stage into a focused subjob. Use tRunJob in a parent orchestrator. See Maintainability Remediation → Fixing Large Job Component Count (RULE-COMP-002).
 
 **source:** Talend Health Analyzer maintainability rule engine
@@ -103,7 +103,7 @@
 
 **impact:** Duplicate configurations inflate job size, increase maintenance effort (every change must be applied N times), and create inconsistency risk when some copies are updated but others are not. This is an active job-level maintainability finding with a 1-point deduction.
 
-**classification:** LOW (1 point) — Minor maintainability impact.
+**classification:** Advisory — Minor maintainability impact; duplicate configuration.
 **remediation:** Identify duplicate configurations. For DB inputs: extract into tMetadataConnection. For tMaps: consolidate or extract into routines. For files: consolidate or use tFileList to iterate. See Maintainability Remediation → Fixing Duplicate Component Configuration (RULE-COMP-006).
 
 **source:** Talend Health Analyzer maintainability rule engine

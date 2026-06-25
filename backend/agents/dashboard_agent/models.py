@@ -23,6 +23,10 @@ class DashboardResponse(BaseModel):
     project_name: str
     total_jobs: int
     job_names: list[str] = Field(default_factory=list)
+    total_subjobs: int = 0
+    total_master_jobs: int = 0
+    subjob_names: list[str] = Field(default_factory=list)
+    master_job_names: list[str] = Field(default_factory=list)
     total_components: int
     total_disabled_components: int = 0
     critical_issues: int

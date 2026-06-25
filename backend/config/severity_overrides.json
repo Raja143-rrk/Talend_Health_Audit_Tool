@@ -4,7 +4,7 @@
   "_example": {
     "client_acme": {
       "RULE-SEC-001": "Warning - Relaxed severity for internal tools",
-      "RULE-SEC-008": "Informational - Username exposure acceptable"
+      "RULE-SEC-007": "Informational - Username exposure acceptable"
     }
   },
   "overrides": {}

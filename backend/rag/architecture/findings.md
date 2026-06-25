@@ -11,9 +11,9 @@
 
 **detection_logic:** Parse the project inventory for `<context>` or `<contextGroup>` elements. If none are found, flag the entire inventory. Context groups can exist in job designs (.item files) or in dedicated context files (.context).
 
-**impact:** Without contexts, every environment-specific parameter (connection string, file path, credential) is hardcoded in job designs. Deploying to a new environment requires modifying each job manually, which is error-prone and violates security best practices. This is an inventory-level architecture finding with a 5-point deduction.
+**impact:** Without contexts, every environment-specific parameter (connection string, file path, credential) is hardcoded in job designs. Deploying to a new environment requires modifying each job manually, which is error-prone and violates security best practices. This is an inventory-level architecture finding with a 1-point deduction.
 
-**classification:** Risk — Major architectural concern; missing error handling layer.
+**classification:** Advisory — Minor architectural concern; context governance improvement.
 **remediation:** Create context groups for each environment. Define context variables for all environment-specific values. Map variables to component parameters. Create `.properties` files per environment. Implement context validation. See Architecture Remediation → Fixing Missing Contexts (RULE-ARCH-001).
 
 **source:** Talend Health Analyzer architecture rule engine
@@ -29,9 +29,9 @@
 
 **detection_logic:** Aggregate all unique database types, file system types, and API endpoints referenced across all jobs. Count distinct system types. If the count exceeds 8, flag the inventory.
 
-**impact:** A large number of distinct system types increases integration complexity, testing overhead, and maintenance burden. Each system type requires specialized knowledge, connection management, and error handling patterns. This is an inventory-level architecture finding with a 2-point deduction.
+**impact:** A large number of distinct system types increases integration complexity, testing overhead, and maintenance burden. Each system type requires specialized knowledge, connection management, and error handling patterns. This is an inventory-level architecture finding with a 1-point deduction.
 
-**classification:** Warning — Moderate architectural concern.
+**classification:** Advisory — Minor architectural concern; system spread observation.
 **remediation:** Inventory all system types. Identify candidates for consolidation. Create governed metadata connections per type. Establish a review process for new integrations. See Architecture Remediation → Fixing High System Spread (RULE-ARCH-002).
 
 **source:** Talend Health Analyzer architecture rule engine
@@ -65,9 +65,9 @@
 
 **detection_logic:** Search the workspace root and common CI/CD directories for known configuration files: Jenkinsfile, Jenkinsfile.groovy, .gitlab-ci.yml, .github/workflows/*.yml, azure-pipelines.yml, build.xml, pom.xml, .ci/, ci/, scripts/build*, scripts/deploy*. If no CI/CD artifacts are found, flag the inventory.
 
-**impact:** Without CI/CD, every build and deployment is a manual process. This leads to environment drift, inconsistent deployments, longer release cycles, and increased risk of human error. This is an inventory-level architecture finding with a 2-point deduction.
+**impact:** Without CI/CD, every build and deployment is a manual process. This leads to environment drift, inconsistent deployments, longer release cycles, and increased risk of human error. This is an inventory-level architecture finding with a 1-point deduction.
 
-**classification:** Warning — Moderate architectural concern.
+**classification:** Advisory — Minor architectural concern; CI/CD process improvement.
 **remediation:** Choose a CI/CD platform. Create the pipeline configuration file. Script the Talend build process. Integrate automated testing. Configure deployment environments. See Architecture Remediation → Fixing Missing CI/CD Pipeline (RULE-ARCH-004).
 
 **source:** Talend Health Analyzer architecture rule engine
@@ -119,9 +119,9 @@
 
 **detection_logic:** Check every job with more than 50 components. Within the job XML, search for `<node componentName="tRunJob"`. If no tRunJob component is found and the component count exceeds 50, flag the job. Disabled tRunJob components are not counted as valid decomposition.
 
-**impact:** Monolithic jobs with no parent/child decomposition cannot be partially restarted on failure — the entire job must rerun. They are harder to test, harder to debug, and cannot scale horizontally. This is an active job-level architecture finding with a 2-point deduction.
+**impact:** Monolithic jobs with no parent/child decomposition cannot be partially restarted on failure — the entire job must rerun. They are harder to test, harder to debug, and cannot scale horizontally. This is an active job-level architecture finding with a 1-point deduction.
 
-**classification:** Warning — Moderate architectural concern.
+**classification:** Advisory — Minor architectural concern; decomposition preference.
 **remediation:** Analyze the monolithic job to identify distinct processing stages. Create a parent orchestrator. Extract each stage into a focused child job. Configure tRunJob with appropriate data passing and error handling. See Architecture Remediation → Fixing Missing Parent/Child Job Decomposition (RULE-ARCH-007).
 
 **source:** Talend Health Analyzer architecture rule engine

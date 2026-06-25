@@ -1,12 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import {
   Area,
   AreaChart,
-  Bar,
-  BarChart,
   CartesianGrid,
   Cell,
   Legend,
@@ -110,7 +108,41 @@ export function ComponentDistributionChart({
   data: DashboardChartPoint[];
   onClick?: () => void;
 }) {
-  if (!data.length) {
+  const barData = useMemo(() => {
+    if (!data.length) return [];
+
+    const countMap: Record<string, number> = {};
+    for (const item of data) {
+      const name = item.name;
+      const value = item.value ?? 0;
+      if (name && value > 0) {
+        countMap[name] = (countMap[name] ?? 0) + value;
+      }
+    }
+
+    const sorted = Object.entries(countMap).sort(([, a], [, b]) => b - a);
+    const top = sorted.slice(0, 10);
+    const rest = sorted.slice(10);
+    const othersCount = rest.reduce((sum, [, v]) => sum + v, 0);
+
+    const result = top.map(([name, count]) => ({ name, count }));
+    if (othersCount > 0) {
+      result.push({ name: "Others", count: othersCount });
+    }
+    return result;
+  }, [data]);
+
+  const totalCount = useMemo(
+    () => barData.reduce((sum, item) => sum + item.count, 0),
+    [barData],
+  );
+
+  const maxCount = useMemo(
+    () => (barData.length ? barData[0].count : 0),
+    [barData],
+  );
+
+  if (!barData.length) {
     return (
       <ChartCard title="Component Distribution" description="Active components by type." onClick={onClick}>
         <EmptyChartState />
@@ -120,28 +152,41 @@ export function ComponentDistributionChart({
 
   return (
     <ChartCard title="Component Distribution" description="Active components by type." onClick={onClick}>
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            dataKey="value"
-            nameKey="name"
-            innerRadius={62}
-            outerRadius={94}
-            paddingAngle={3}
-            animationDuration={800}
-          >
-            {data.map((entry, index) => (
-              <Cell
-                key={entry.name}
-                fill={chartColors[index % chartColors.length]}
-              />
-            ))}
-          </Pie>
-          <Tooltip content={<ChartTooltip />} />
-          <Legend iconType="circle" />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className="flex h-full flex-col justify-center gap-2 overflow-visible">
+        {barData.map((item, index) => {
+          const pct = totalCount > 0 ? ((item.count / totalCount) * 100).toFixed(1) : "0.0";
+          const barWidth = maxCount > 0 ? (item.count / maxCount) * 100 : 0;
+          const isOthers = item.name === "Others";
+          const isTop = index === 0 && !isOthers;
+          const barColor = isOthers ? "#94a3b8" : isTop ? "#06b6d4" : "#3b82f6";
+
+          return (
+            <div key={item.name} className="group relative flex items-center gap-3">
+              <span className="w-24 shrink-0 truncate text-right text-xs font-medium leading-5 text-slate-700 dark:text-slate-300">
+                {item.name}
+              </span>
+              <div className="relative flex-1">
+                <div
+                  className="h-2.5 rounded-[3px] transition-all group-hover:opacity-80"
+                  style={{
+                    width: `${barWidth}%`,
+                    backgroundColor: barColor,
+                    minWidth: barWidth > 0 ? 4 : undefined,
+                  }}
+                />
+              </div>
+              <span className="w-9 shrink-0 text-right text-xs font-semibold tabular-nums leading-5 text-slate-800 dark:text-slate-200">
+                {item.count}
+              </span>
+              <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-slate-200/60 bg-white/95 px-3 py-2 text-xs shadow-lg opacity-0 transition-opacity group-hover:opacity-100 dark:border-white/10 dark:bg-slate-900/95">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">{item.name}</p>
+                <p className="text-slate-500 dark:text-slate-400">Count: {item.count}</p>
+                <p className="text-slate-500 dark:text-slate-400">{pct}% of total</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </ChartCard>
   );
 }
@@ -242,38 +287,6 @@ export function SourceTargetFlowDiagram({
             strokeWidth={2.5}
           />
         </AreaChart>
-      </ResponsiveContainer>
-    </ChartCard>
-  );
-}
-
-export function FindingsTrendTimeline({
-  data,
-}: {
-  data: DashboardChartPoint[];
-}) {
-  if (!data.length) {
-    return (
-      <ChartCard title="Findings Trend" description="Findings by category.">
-        <EmptyChartState />
-      </ChartCard>
-    );
-  }
-
-  return (
-    <ChartCard title="Findings Trend" description="Findings by category.">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={data} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 12 }} />
-          <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} width={120} />
-          <Tooltip content={<ChartTooltip />} />
-          <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={800}>
-            {data.map((entry, index) => (
-              <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />
-            ))}
-          </Bar>
-        </BarChart>
       </ResponsiveContainer>
     </ChartCard>
   );
@@ -392,21 +405,6 @@ export function AnalyticsChartGrid({
     return Object.entries(counts).map(([name, value]) => ({ name, value }));
   })();
 
-  const findingsTrendData = (() => {
-    const securityItems = charts?.security_issues ?? [];
-    const performanceItems = charts?.performance_issues ?? [];
-    const categories: Record<string, number> = {};
-    for (const item of [...securityItems, ...performanceItems]) {
-      const name = item.name || "Other";
-      const total = (item.critical_risk ?? 0) + (item.risk ?? 0) + (item.warning ?? 0) + (item.advisory ?? 0) +
-        (item.runtime ?? 0) + (item.memory ?? 0) + (item.retries ?? 0);
-      if (total > 0) {
-        categories[name] = (categories[name] ?? 0) + total;
-      }
-    }
-    return Object.entries(categories).map(([name, value]) => ({ name, value }));
-  })();
-
   return (
     <section className="space-y-6">
       <div className="grid gap-6 xl:grid-cols-2">
@@ -415,7 +413,6 @@ export function AnalyticsChartGrid({
       </div>
       <div className="grid gap-6 xl:grid-cols-3">
         <SourceTargetFlowDiagram data={charts?.source_target_systems ?? empty} />
-        <FindingsTrendTimeline data={findingsTrendData} />
         <AIInsightsPanel summary={insightsSummary} />
       </div>
     </section>

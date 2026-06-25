@@ -60,37 +60,55 @@ class DashboardService:
     def get_dashboard_overview(
         self,
         analysis_id: str | None = None,
+        job_name: str | None = None,
     ) -> DashboardOverviewResponse:
         record = self._record_or_latest(analysis_id)
         return DashboardOverviewResponse(
             analysis_id=record.analysis_id,
             status=record.status.value,
-            summary=self.get_dashboard_summary(record.analysis_id),
-            charts=self.get_chart_data(record.analysis_id),
-            recommendations=self.get_recommendations(record.analysis_id),
-            security_findings=self.get_security_findings(record.analysis_id),
-            performance_findings=self.get_performance_findings(record.analysis_id),
-            component_drilldown=self.get_component_drilldown(record.analysis_id),
+            summary=self.get_dashboard_summary(record.analysis_id, job_name),
+            charts=self.get_chart_data(record.analysis_id, job_name),
+            recommendations=self.get_recommendations(record.analysis_id, job_name),
+            security_findings=self.get_security_findings(record.analysis_id, job_name),
+            performance_findings=self.get_performance_findings(record.analysis_id, job_name),
+            component_drilldown=self.get_component_drilldown(record.analysis_id, job_name),
             agents=self._get_agent_statuses(record),
         )
 
     def get_dashboard_summary(
         self,
         analysis_id: str | None = None,
+        job_name: str | None = None,
     ) -> DashboardSummaryResponse:
         record = self._record_or_latest(analysis_id)
         dashboard = self._dashboard(record)
         kpis = dashboard.get("kpis") or []
 
+        job_names = [
+            str(jn) for jn in dashboard.get("job_names", []) if str(jn).strip()
+        ]
+        subjob_names = [
+            str(n) for n in dashboard.get("subjob_names", []) if str(n).strip()
+        ]
+        master_job_names = [
+            str(n) for n in dashboard.get("master_job_names", []) if str(n).strip()
+        ]
+
+        if job_name:
+            job_names = [jn for jn in job_names if jn == job_name]
+            subjob_names = [n for n in subjob_names if n == job_name]
+            master_job_names = [n for n in master_job_names if n == job_name]
+            kpis = self._filtered_kpis(record, job_name, kpis)
+
         return DashboardSummaryResponse(
             project_name=str(dashboard.get("project_name") or "Talend Health Analyzer"),
             environment="analysis",
-            total_jobs=int(dashboard.get("total_jobs") or 0),
-            job_names=[
-                str(job_name)
-                for job_name in dashboard.get("job_names", [])
-                if str(job_name).strip()
-            ],
+            total_jobs=len(job_names),
+            job_names=job_names,
+            total_subjobs=len(subjob_names),
+            total_master_jobs=len(master_job_names),
+            subjob_names=subjob_names,
+            master_job_names=master_job_names,
             compliance_score=int(dashboard.get("compliance_score") or 100),
             compliance_grade=str(dashboard.get("compliance_grade") or "Optimized"),
             compliance_maturity=str(dashboard.get("compliance_maturity") or "standard"),
@@ -100,12 +118,16 @@ class DashboardService:
             score_breakdown=dashboard.get("score_breakdown") or self._empty_score_breakdown(),
         )
 
-    def get_chart_data(self, analysis_id: str | None = None) -> ChartDataResponse:
+    def get_chart_data(self, analysis_id: str | None = None, job_name: str | None = None) -> ChartDataResponse:
         record = self._record_or_latest(analysis_id)
         dashboard = self._dashboard(record)
         charts = dashboard.get("charts") or {}
         security_findings = self._security_finding_payloads(record)
         performance_findings = self._performance_finding_payloads(record)
+
+        if job_name:
+            security_findings = [f for f in security_findings if self._finding_job_name(f) == job_name]
+            performance_findings = [f for f in performance_findings if self._finding_job_name(f) == job_name]
 
         return ChartDataResponse(
             component_distribution=self._chart_points(charts.get("component_distribution", [])),
@@ -121,23 +143,29 @@ class DashboardService:
             risk_timeline=self._risk_timeline(record, dashboard),
         )
 
-    def get_security_findings(self, analysis_id: str | None = None) -> FindingsResponse:
+    def get_security_findings(self, analysis_id: str | None = None, job_name: str | None = None) -> FindingsResponse:
         record = self._record_or_latest(analysis_id)
+        dashboard = self._dashboard(record)
+        subjob_set = set(dashboard.get("subjob_names", []))
         findings = [
-            self._finding(finding, owner="Security")
-            for finding in self._security_finding_payloads(record)
+            f for payload in self._security_finding_payloads(record)
+            if not job_name or self._finding_job_name(payload) == job_name
+            for f in [self._finding(payload, owner="Security", subjob_set=subjob_set)]
         ]
         return FindingsResponse(total=len(findings), items=findings)
 
-    def get_performance_findings(self, analysis_id: str | None = None) -> FindingsResponse:
+    def get_performance_findings(self, analysis_id: str | None = None, job_name: str | None = None) -> FindingsResponse:
         record = self._record_or_latest(analysis_id)
+        dashboard = self._dashboard(record)
+        subjob_set = set(dashboard.get("subjob_names", []))
         findings = [
-            self._finding(finding, owner="Performance")
-            for finding in self._performance_finding_payloads(record)
+            f for payload in self._performance_finding_payloads(record)
+            if not job_name or self._finding_job_name(payload) == job_name
+            for f in [self._finding(payload, owner="Performance", subjob_set=subjob_set)]
         ]
         return FindingsResponse(total=len(findings), items=findings)
 
-    def get_recommendations(self, analysis_id: str | None = None) -> RecommendationsResponse:
+    def get_recommendations(self, analysis_id: str | None = None, job_name: str | None = None) -> RecommendationsResponse:
         record = self._record_or_latest(analysis_id)
         component_recs = self._component_recommendations(record)
         agent_recs = [
@@ -146,15 +174,17 @@ class DashboardService:
             if rec.get("category") == "cleanup"
         ]
         all_recs = [*component_recs, *agent_recs]
+        if job_name:
+            all_recs = [r for r in all_recs if r.job_name and r.job_name == job_name]
         return RecommendationsResponse(total=len(all_recs), items=all_recs)
 
-    def get_component_drilldown(self, analysis_id: str | None = None) -> list[ComponentDrillDown]:
+    def get_component_drilldown(self, analysis_id: str | None = None, job_name: str | None = None) -> list[ComponentDrillDown]:
         record = self._record_or_latest(analysis_id)
         findings = [
-            *self.get_security_findings(record.analysis_id).items,
-            *self.get_performance_findings(record.analysis_id).items,
+            *self.get_security_findings(record.analysis_id, job_name).items,
+            *self.get_performance_findings(record.analysis_id, job_name).items,
         ]
-        recommendations = self.get_recommendations(record.analysis_id).items
+        recommendations = self.get_recommendations(record.analysis_id, job_name).items
         grouped: dict[tuple[str, str, str], ComponentDrillDown] = {}
 
         for finding in findings:
@@ -373,13 +403,14 @@ class DashboardService:
             )
         ]
 
-    def _finding(self, value: dict[str, Any], owner: str) -> Finding:
+    def _finding(self, value: dict[str, Any], owner: str, subjob_set: set[str] | None = None) -> Finding:
         evidence = value.get("evidence") or {}
         recommendation = self._finding_recommendation(value)
+        job_name = str(value.get("job_name") or evidence.get("job_name") or evidence.get("job") or "unknown")
         return Finding(
             id=str(value.get("id") or evidence.get("rule_id") or "finding"),
             name=str(value.get("title") or value.get("name") or "Finding"),
-            job_name=str(value.get("job_name") or evidence.get("job_name") or evidence.get("job") or "unknown"),
+            job_name=job_name,
             component_name=str(
                 value.get("component_name")
                 or evidence.get("component")
@@ -407,6 +438,7 @@ class DashboardService:
             impact=str(value.get("description") or value.get("impact") or ""),
             recommendation=recommendation,
             remediation=evidence.get("remediation"),
+            subjob_name=job_name if subjob_set and job_name in subjob_set else "",
             evidence=evidence if isinstance(evidence, dict) else {},
         )
 
@@ -462,6 +494,27 @@ class DashboardService:
                 )
             )
         return recommendations
+
+    def _filtered_kpis(self, record, job_name: str, original_kpis: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        security_payloads = self._security_finding_payloads(record)
+        performance_payloads = self._performance_finding_payloads(record)
+        security_payloads = [f for f in security_payloads if self._finding_job_name(f) == job_name]
+        performance_payloads = [f for f in performance_payloads if self._finding_job_name(f) == job_name]
+        all_filtered = [*security_payloads, *performance_payloads]
+        critical_count = sum(
+            1 for f in all_filtered
+            if str(f.get("severity") or "").lower() in {"critical", "critical_risk"}
+        )
+        kpi_map = {str(kpi.get("label")): dict(kpi) for kpi in original_kpis}
+        kpi_map["Total Jobs"] = {"label": "Total Jobs", "value": 1, "severity": "informational"}
+        kpi_map["Critical Issues"] = {"label": "Critical Issues", "value": critical_count, "severity": "critical_risk" if critical_count else "informational"}
+        kpi_map["Security Findings"] = {"label": "Security Findings", "value": len(security_payloads), "severity": "warning" if security_payloads else "informational"}
+        kpi_map["Performance Findings"] = {"label": "Performance Findings", "value": len(performance_payloads), "severity": "warning" if performance_payloads else "informational"}
+        return list(kpi_map.values())
+
+    def _finding_job_name(self, value: dict[str, Any]) -> str:
+        evidence = value.get("evidence") or {}
+        return str(value.get("job_name") or evidence.get("job_name") or evidence.get("job") or "unknown")
 
     def _finding_recommendation(self, value: dict[str, Any]) -> str:
         evidence = value.get("evidence") or {}

@@ -227,9 +227,50 @@ function ComponentsSection({
 }
 
 function ReportsSection({ dashboard }: { dashboard: DashboardOverview | null }) {
+  const allFindings = dashboard
+    ? [
+        ...dashboard.security_findings.items,
+        ...dashboard.performance_findings.items,
+      ]
+    : [];
+
+  const categories = [
+    { key: "architecture", label: "Architecture" },
+    { key: "component", label: "Maintainability" },
+    { key: "performance", label: "Performance" },
+    { key: "security", label: "Security" },
+  ];
+
+  const findMetric = (label: string) =>
+    dashboard?.summary.metrics?.find((m) => m.label === label)?.value ?? 0;
+
   const exportJson = () => {
     if (!dashboard) return;
-    const blob = new Blob([JSON.stringify(dashboard, null, 2)], { type: "application/json" });
+    const catData = categories.map((cat) => ({
+      category: cat.label,
+      count: allFindings.filter((f) => f.category === cat.key).length,
+      findings: allFindings.filter((f) => f.category === cat.key),
+    }));
+    const report = {
+      project_name: dashboard.summary.project_name,
+      analysis_id: dashboard.analysis_id,
+      last_analyzed_at: dashboard.summary.last_analyzed_at,
+      summary: {
+        compliance_score: dashboard.summary.compliance_score,
+        compliance_grade: dashboard.summary.compliance_grade,
+        total_jobs: findMetric("Total Jobs"),
+        total_subjobs: dashboard.summary.total_subjobs ?? 0,
+        total_master_jobs: dashboard.summary.total_master_jobs ?? 0,
+        subjob_names: dashboard.summary.subjob_names ?? [],
+        master_job_names: dashboard.summary.master_job_names ?? [],
+        total_components: findMetric("Total Components"),
+        disabled_components: findMetric("Disabled Components"),
+        critical_issues: findMetric("Critical Issues"),
+        total_findings: (dashboard.security_findings?.total ?? 0) + (dashboard.performance_findings?.total ?? 0),
+      },
+      findings_by_category: catData,
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -238,31 +279,166 @@ function ReportsSection({ dashboard }: { dashboard: DashboardOverview | null }) 
     URL.revokeObjectURL(url);
   };
 
+  const csvEsc = (v: unknown) => `"${String(v).replaceAll('"', '""')}"`;
+
   const exportFindingsCsv = () => {
     if (!dashboard) return;
-    const findings = [
-      ...dashboard.security_findings.items,
-      ...dashboard.performance_findings.items,
-    ];
-    const rows = [
-      ["id", "name", "job", "component", "type", "category", "severity", "rule"],
-      ...findings.map((finding) => [
-        finding.id,
-        finding.name,
-        finding.job_name,
-        finding.component_name,
-        finding.component_type,
-        finding.category,
-        finding.severity,
-        finding.rule_triggered,
-      ]),
-    ];
-    const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const lines: string[] = [];
+    lines.push(`# Talend Health Audit Report - ${dashboard.summary.project_name}`);
+    lines.push(`# Analysis ID: ${dashboard.analysis_id}`);
+    lines.push(`# Last analyzed: ${dashboard.summary.last_analyzed_at}`);
+    lines.push(`# Compliance Score: ${dashboard.summary.compliance_score}%`);
+    lines.push(`# Grade: ${dashboard.summary.compliance_grade}`);
+    lines.push(`# Total Jobs: ${findMetric("Total Jobs")} (Master: ${dashboard.summary.total_master_jobs ?? 0}, Subjobs: ${dashboard.summary.total_subjobs ?? 0})`);
+    lines.push(`# Total Components: ${findMetric("Total Components")}`);
+    lines.push(`# Disabled Components: ${findMetric("Disabled Components")}`);
+    lines.push(`# Critical Issues: ${findMetric("Critical Issues")}`);
+    lines.push(`# Total Findings: ${(dashboard.security_findings?.total ?? 0) + (dashboard.performance_findings?.total ?? 0)}`);
+    lines.push("");
+
+    for (const cat of categories) {
+      const catFindings = allFindings.filter((f) => f.category === cat.key);
+      if (catFindings.length === 0) continue;
+      lines.push(`# ${cat.label} Findings (${catFindings.length})`);
+      lines.push(["id", "name", "job", "component", "type", "severity", "rule", "subjob"].map(csvEsc).join(","));
+      for (const f of catFindings) {
+        lines.push([f.id, f.name, f.job_name, f.component_name, f.component_type, f.severity, f.rule_triggered, f.subjob_name ?? ""].map(csvEsc).join(","));
+      }
+      lines.push("");
+    }
+    const csv = lines.join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
     link.download = `talend-health-findings-${dashboard.analysis_id ?? "latest"}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportWord = () => {
+    if (!dashboard) return;
+
+    const catData = categories.map((cat) => ({
+      ...cat,
+      findings: allFindings.filter((f) => f.category === cat.key),
+    }));
+
+    const rowsHtml = catData.map((cat) => `
+      <tr>
+        <td style="padding:8px;border:1px solid #ccc;font-weight:bold">${cat.label}</td>
+        <td style="padding:8px;border:1px solid #ccc">${cat.findings.length}</td>
+      </tr>
+    `).join("");
+
+    const catTablesHtml = catData.filter((c) => c.findings.length > 0).map((cat) => `
+      <h2 style="color:#1e293b;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-top:30px">${cat.label} Findings</h2>
+      <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:12px">
+        <thead>
+          <tr style="background:#1e293b;color:#fff">
+            <th style="padding:8px;border:1px solid #334155;text-align:left">ID</th>
+            <th style="padding:8px;border:1px solid #334155;text-align:left">Name</th>
+            <th style="padding:8px;border:1px solid #334155;text-align:left">Job</th>
+            <th style="padding:8px;border:1px solid #334155;text-align:left">Subjob</th>
+            <th style="padding:8px;border:1px solid #334155;text-align:left">Component</th>
+            <th style="padding:8px;border:1px solid #334155;text-align:left">Severity</th>
+            <th style="padding:8px;border:1px solid #334155;text-align:left">Rule</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cat.findings.map((f) => `
+            <tr>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.id}</td>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.name}</td>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.job_name}</td>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.subjob_name ?? ""}</td>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.component_name}</td>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.severity}</td>
+              <td style="padding:6px;border:1px solid #e2e8f0">${f.rule_triggered}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `).join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Talend Health Audit Report</title>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; margin: 40px; color: #1e293b; }
+    h1 { color: #0d9488; font-size: 28px; margin-bottom: 4px; }
+    .subtitle { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    .summary-grid { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+    .summary-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 24px; min-width: 140px; }
+    .summary-card .label { font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 0.5px; }
+    .summary-card .value { font-size: 24px; font-weight: bold; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Talend Health Audit Report</h1>
+  <p class="subtitle">${dashboard.summary.project_name} &mdash; ${dashboard.summary.last_analyzed_at}</p>
+
+  <h2 style="color:#1e293b;border-bottom:2px solid #0d9488;padding-bottom:6px">Dashboard Summary</h2>
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="label">Compliance Score</div>
+      <div class="value">${dashboard.summary.compliance_score}%</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Grade</div>
+      <div class="value">${dashboard.summary.compliance_grade}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Total Jobs</div>
+      <div class="value">${findMetric("Total Jobs")}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:2px">${dashboard.summary.total_master_jobs ?? 0} master, ${dashboard.summary.total_subjobs ?? 0} subjob${(dashboard.summary.total_subjobs ?? 0) !== 1 ? "s" : ""}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Total Components</div>
+      <div class="value">${findMetric("Total Components")}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Disabled Components</div>
+      <div class="value">${findMetric("Disabled Components")}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Critical Issues</div>
+      <div class="value">${findMetric("Critical Issues")}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Total Findings</div>
+      <div class="value">${(dashboard.security_findings?.total ?? 0) + (dashboard.performance_findings?.total ?? 0)}</div>
+    </div>
+  </div>
+
+  <h2 style="color:#1e293b;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-top:30px">Findings by Category</h2>
+  <table style="width:100%;border-collapse:collapse;margin-top:12px;font-size:13px">
+    <thead>
+      <tr style="background:#7c3aed;color:#fff">
+        <th style="padding:10px;border:1px solid #6d28d9;text-align:left">Category</th>
+        <th style="padding:10px;border:1px solid #6d28d9;text-align:left">Finding Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  ${catTablesHtml}
+
+  <p style="margin-top:40px;font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:12px">
+    Generated by Talend Health Audit Tool &mdash; Analysis ID: ${dashboard.analysis_id}
+  </p>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `talend-health-report-${dashboard.analysis_id ?? "latest"}.doc`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -315,6 +491,14 @@ function ReportsSection({ dashboard }: { dashboard: DashboardOverview | null }) 
               Export findings CSV
               <Download className="h-4 w-4" />
             </button>
+            <button
+              type="button"
+              onClick={exportWord}
+              className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-semibold dark:border-white/10 dark:bg-white/5"
+            >
+              Export report as Word
+              <FileText className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </section>
@@ -327,10 +511,18 @@ function DashboardPageContent() {
   const taskId = searchParams.get("taskId");
   const [activeSection, setActiveSection] = useState<DashboardSection>("Dashboard");
   const [sectionQuery, setSectionQuery] = useState("");
+  const [aiAgentsEnabled, setAiAgentsEnabled] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("aiAgentsEnabled") !== "false";
+    }
+    return true;
+  });
   const [completedTask, setCompletedTask] = useState<AnalysisTaskStatus | null>(null);
   const [analysisRunning, setAnalysisRunning] = useState(Boolean(taskId));
   const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<string>("");
+  const [allJobNames, setAllJobNames] = useState<string[]>([]);
   const completeAnalysis = useCallback((status?: AnalysisTaskStatus) => {
     if (status) {
       setCompletedTask(status);
@@ -349,10 +541,16 @@ function DashboardPageContent() {
 
     async function loadDashboard() {
       try {
-        const overview = await getDashboardOverview(activeAnalysisId);
+        const overview = await getDashboardOverview(
+          activeAnalysisId,
+          selectedJob || undefined,
+        );
         if (!cancelled) {
           setDashboard(overview);
           setDashboardError(null);
+          if (overview.summary?.job_names?.length) {
+            setAllJobNames((prev) => prev.length ? prev : overview.summary.job_names);
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -370,23 +568,36 @@ function DashboardPageContent() {
     return () => {
       cancelled = true;
     };
-  }, [analysisId, analysisRunning]);
+  }, [analysisId, analysisRunning, selectedJob]);
 
+  const jobNames = dashboard?.summary?.job_names ?? [];
   const projectName = dashboard?.summary?.project_name ?? "No dashboard output loaded";
   const complianceScore = dashboard?.summary?.compliance_score;
   const complianceGrade = dashboard?.summary?.compliance_grade;
   const totalJobs = dashboard?.summary?.metrics?.find((m) => m.label === "Total Jobs")?.value ?? 0;
+  const totalSubjobs = dashboard?.summary?.total_subjobs ?? 0;
+  const totalMasterJobs = dashboard?.summary?.total_master_jobs ?? 0;
   const totalComponents = dashboard?.summary?.metrics?.find((m) => m.label === "Total Components")?.value ?? 0;
   const disabledComponents = dashboard?.summary?.metrics?.find((m) => m.label === "Disabled Components")?.value ?? 0;
   const criticalIssues =
     dashboard?.summary?.metrics?.find((metric) => metric.label === "Critical Issues")?.value ?? 0;
   const totalFindings =
     (dashboard?.security_findings?.total ?? 0) + (dashboard?.performance_findings?.total ?? 0);
+  const categoryScores = dashboard?.summary?.score_breakdown?.category_scores ?? [];
   const securityFindings = dashboard?.security_findings?.items ?? [];
   const performanceFindings = dashboard?.performance_findings?.items ?? [];
+  const allFindings = [...securityFindings, ...performanceFindings];
+  const architectureFindings = allFindings.filter((f) => f.category === "architecture");
+  const maintainabilityFindings = allFindings.filter((f) => f.category === "component");
   const componentDrilldown = dashboard?.component_drilldown ?? [];
   const securityDrilldown = filterDrilldown(componentDrilldown, securityFindings);
   const performanceDrilldown = filterDrilldown(componentDrilldown, performanceFindings);
+  const architectureDrilldown = filterDrilldown(componentDrilldown, architectureFindings);
+  const maintainabilityDrilldown = filterDrilldown(componentDrilldown, maintainabilityFindings);
+  useEffect(() => {
+    localStorage.setItem("aiAgentsEnabled", String(aiAgentsEnabled));
+  }, [aiAgentsEnabled]);
+
   const handleChatAction = useCallback((section: DashboardSection, query?: string) => {
     setSectionQuery(query ?? "");
     setActiveSection(section);
@@ -396,6 +607,7 @@ function DashboardPageContent() {
     <DashboardLayout
       activeSection={activeSection}
       onSectionChange={setActiveSection}
+      aiAgentsEnabled={aiAgentsEnabled}
     >
       <AnimatePresence mode="wait">
         {analysisRunning ? (
@@ -432,6 +644,20 @@ function DashboardPageContent() {
                       ? `Analysis ${completedTask.status}`
                       : "Analysis completed"}
                   </div>
+                  {allJobNames.length > 1 ? (
+                    <select
+                      value={selectedJob}
+                      onChange={(e) => setSelectedJob(e.target.value)}
+                      className="h-10 rounded-xl border border-white/10 bg-white/5 px-3 text-sm text-white/80 outline-none backdrop-blur-sm focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20"
+                    >
+                      <option value="">All jobs</option>
+                      {allJobNames.map((name) => (
+                        <option key={name} value={name} className="bg-slate-800 text-white">
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
                   {complianceScore != null ? (
                     <div className="rounded-xl bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-300 backdrop-blur-sm">
                       {complianceGrade}
@@ -467,6 +693,7 @@ function DashboardPageContent() {
                 value={totalJobs}
                 tone="blue"
                 icon={HardDrive}
+                subtitle={`${totalMasterJobs} master, ${totalSubjobs} subjob${totalSubjobs !== 1 ? "s" : ""}`}
               />
               <KpiCard
                 title="Active Components"
@@ -476,13 +703,44 @@ function DashboardPageContent() {
                 subtitle={`${disabledComponents} disabled`}
                 onClick={() => setActiveSection("Components")}
               />
-              <KpiCard
-                title="Total Findings"
-                value={totalFindings}
-                tone="violet"
-                icon={Bug}
-                onClick={() => setActiveSection("Security")}
-              />
+              <motion.article
+                className="group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-violet-500/20 to-violet-600/5 border-violet-500/30 bg-white/80 p-5 shadow-lg shadow-violet-500/10 backdrop-blur-xl transition-all dark:border-white/10 dark:bg-slate-950/80"
+                whileHover={{ y: -4, scale: 1.02 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br from-white/40 to-transparent blur-2xl dark:from-white/5" />
+                <div className="relative">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        Total Findings
+                      </p>
+                      <p className="mt-2 text-3xl font-bold text-slate-950 dark:text-white">
+                        {totalFindings}
+                      </p>
+                    </div>
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-600 shadow-sm backdrop-blur-sm dark:text-violet-300">
+                      <Bug className="h-5 w-5" />
+                    </div>
+                  </div>
+                  {categoryScores.length > 0 ? (
+                    <div className="mt-4 space-y-1">
+                      {categoryScores.map((cs) => (
+                        <div
+                          key={cs.key}
+                          className="flex cursor-pointer items-center justify-between text-xs text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
+                          onClick={() => setActiveSection(cs.label as DashboardSection)}
+                        >
+                          <span>{cs.label}</span>
+                          <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                            {cs.failed_rules}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              </motion.article>
             </section>
 
             <AnalyticsChartGrid
@@ -542,6 +800,46 @@ function DashboardPageContent() {
               </>
             ) : null}
 
+            {activeSection === "Architecture" ? (
+              <>
+                <SectionHeader
+                  eyebrow="Architecture"
+                  title="Architecture findings"
+                  description="Focused view of architecture findings, affected components, severity, evidence, and remediation recommendations."
+                />
+                <AnalysisTabs
+                  key={`architecture-findings-${sectionQuery}`}
+                  lockedTab="security"
+                  title="Architecture findings"
+                  eyebrow="Architecture Workspace"
+                  initialQuery={sectionQuery}
+                  securityFindings={architectureFindings}
+                  recommendations={dashboard?.recommendations?.items}
+                  componentDrilldown={architectureDrilldown}
+                />
+              </>
+            ) : null}
+
+            {activeSection === "Maintainability" ? (
+              <>
+                <SectionHeader
+                  eyebrow="Maintainability"
+                  title="Maintainability findings"
+                  description="Focused view of maintainability findings, affected components, severity, evidence, and remediation recommendations."
+                />
+                <AnalysisTabs
+                  key={`maintainability-findings-${sectionQuery}`}
+                  lockedTab="security"
+                  title="Maintainability findings"
+                  eyebrow="Maintainability Workspace"
+                  initialQuery={sectionQuery}
+                  securityFindings={maintainabilityFindings}
+                  recommendations={dashboard?.recommendations?.items}
+                  componentDrilldown={maintainabilityDrilldown}
+                />
+              </>
+            ) : null}
+
             {activeSection === "Components" ? (
               <ComponentsSection dashboard={dashboard} query={sectionQuery} />
             ) : null}
@@ -582,11 +880,45 @@ function DashboardPageContent() {
             ) : null}
 
             {activeSection === "Settings" ? (
-              <SectionHeader
-                eyebrow="Settings"
-                title="Dashboard settings"
-                description="No configurable dashboard settings are exposed for this workflow."
-              />
+              <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+                  Settings
+                </p>
+                <h1 className="mt-2 text-3xl font-semibold text-slate-950 dark:text-white">
+                  Dashboard settings
+                </h1>
+                <div className="mt-6 space-y-4">
+                  <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 dark:border-white/10">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-950 dark:text-white">
+                        AI Agents
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Show or hide the AI Agents module in the sidebar.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={aiAgentsEnabled}
+                      onClick={() => setAiAgentsEnabled((prev) => !prev)}
+                      className={cn(
+                        "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-slate-300 dark:focus-visible:ring-offset-slate-950",
+                        aiAgentsEnabled
+                          ? "bg-cyan-600"
+                          : "bg-slate-200 dark:bg-slate-700",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform",
+                          aiAgentsEnabled ? "translate-x-5" : "translate-x-0",
+                        )}
+                      />
+                    </button>
+                  </div>
+                </div>
+              </section>
             ) : null}
           </motion.div>
         )}

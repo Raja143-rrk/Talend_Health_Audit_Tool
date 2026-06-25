@@ -71,14 +71,16 @@ export function uploadZip(
 }
 
 export function uploadZipAndAnalyze(
-  file: File,
+  files: File[],
   onProgress: (progress: number) => void,
 ): Promise<AnalysisCreateResponse> {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     const formData = new FormData();
 
-    formData.append("file", file, file.name);
+    for (const file of files) {
+      formData.append("file", file, file.name);
+    }
 
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) {

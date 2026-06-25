@@ -96,39 +96,16 @@
 
 ---
 
-## RM-COMP-005: Fixing Inconsistent Error Handling
+## RM-COMP-005: Fixing Duplicate Component Configuration
 
 **rule_id:** RM-COMP-005
 **category:** maintainability
-**title:** Fixing inconsistent error handling
-**description:** Step-by-step guidance for resolving RULE-COMP-005 by adding reject flows and tTryCatch error handling.
+**title:** Fixing duplicate component configuration
+**description:** Step-by-step guidance for resolving RULE-COMP-005 by consolidating duplicate component configurations.
 
 **detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-005 for detection logic.
 
-**impact:** Resolving RULE-COMP-005 prevents silent data loss and ensures predictable error handling behavior across all jobs.
-
-**classification:** Remediation — MEDIUM severity
-**remediation:**
-1. Review all tMap components for missing reject flows: right-click each tMap → select Row reject → connect to a tLogRow or error table output. Configure the reject output to capture the row data and the rejection reason.
-2. Implement a standard error logging approach: write rejected rows to a standardized error table with job_name, component_name, timestamp, error_message, rejected_row_data. Use a consistent tLogRow configuration.
-3. Wrap critical processing blocks (database writes, file outputs, API calls) with tTryCatch: place the critical operation in the Try block, connect the Catch output to error handling (log error, roll back, send alert).
-4. Define standard error responses per job type: batch jobs log error → stop job → send escalation alert; streaming jobs log error → continue with next record → accumulate error count → stop at threshold.
-5. Create a reusable tRunJob-based error handling subjob and call it from all jobs for consistency.
-
-**source:** Talend Health Analyzer remediation documentation
-
----
-
-## RM-COMP-006: Fixing Duplicate Component Configuration
-
-**rule_id:** RM-COMP-006
-**category:** maintainability
-**title:** Fixing duplicate component configuration
-**description:** Step-by-step guidance for resolving RULE-COMP-006 by consolidating duplicate component configurations.
-
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-006 for detection logic.
-
-**impact:** Resolving RULE-COMP-006 reduces job size and ensures that configuration changes need to be applied in only one place.
+**impact:** Resolving RULE-COMP-005 reduces job size and ensures that configuration changes need to be applied in only one place.
 
 **classification:** Remediation — LOW severity
 **remediation:**
@@ -142,16 +119,16 @@
 
 ---
 
-## RM-COMP-007: Fixing Missing Reusable Component Extraction
+## RM-COMP-006: Fixing Missing Reusable Component Extraction
 
-**rule_id:** RM-COMP-007
+**rule_id:** RM-COMP-006
 **category:** maintainability
 **title:** Fixing missing reusable component extraction
-**description:** Step-by-step guidance for resolving RULE-COMP-007 by extracting repeated patterns into shared routines and subjobs.
+**description:** Step-by-step guidance for resolving RULE-COMP-006 by extracting repeated patterns into shared routines and subjobs.
 
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-007 for detection logic.
+**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-006 for detection logic.
 
-**impact:** Resolving RULE-COMP-007 eliminates duplication across jobs, ensuring one fix propagates everywhere rather than requiring N manual updates.
+**impact:** Resolving RULE-COMP-006 eliminates duplication across jobs, ensuring one fix propagates everywhere rather than requiring N manual updates.
 
 **classification:** Remediation — MEDIUM severity
 **remediation:**
@@ -165,40 +142,16 @@
 
 ---
 
-## RM-COMP-008: Fixing Missing Metadata Reuse
+## RM-COMP-007: Fixing Missing Context Standardization
 
-**rule_id:** RM-COMP-008
-**category:** maintainability
-**title:** Fixing missing metadata reuse
-**description:** Step-by-step guidance for resolving RULE-COMP-008 by migrating inline connections to governed metadata.
-
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-008 for detection logic.
-
-**impact:** Resolving RULE-COMP-008 centralizes connection management so that a single update propagates to all referencing jobs.
-
-**classification:** Remediation — MEDIUM severity
-**remediation:**
-1. Inventory all inline database and file connections used in the flagged job.
-2. For each distinct database connection, create a governed metadata connection: in Talend Studio Repository, Metadata → Db Connections → Create connection. Configure the connection with standard parameters. Use context variables for environment-specific values inside the metadata connection.
-3. For each distinct file schema, create governed file metadata: Metadata → File Delimited (or File XML) → Create. Define the schema: column names, data types, delimiter, encoding, header rows.
-4. Replace inline components with metadata-referencing versions: right-click the inline component → Replace with metadata connection. Select the appropriate governed metadata from the Repository. Verify that all component parameters resolve correctly.
-5. Remove any hardcoded credentials exposed in inline connections — credentials should only exist in context variables or secrets management.
-6. Validate that the job still compiles and runs correctly with metadata references.
-
-**source:** Talend Health Analyzer remediation documentation
-
----
-
-## RM-COMP-009: Fixing Missing Context Standardization
-
-**rule_id:** RM-COMP-009
+**rule_id:** RM-COMP-007
 **category:** maintainability
 **title:** Fixing missing context standardization
-**description:** Step-by-step guidance for resolving RULE-COMP-009 by migrating hardcoded values to standardized context variables.
+**description:** Step-by-step guidance for resolving RULE-COMP-007 by migrating hardcoded values to standardized context variables.
 
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-009 for detection logic.
+**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-007 for detection logic.
 
-**impact:** Resolving RULE-COMP-009 makes environment promotion predictable, auditable, and less error-prone.
+**impact:** Resolving RULE-COMP-007 makes environment promotion predictable, auditable, and less error-prone.
 
 **classification:** Remediation — MEDIUM severity
 **remediation:**
@@ -212,16 +165,16 @@
 
 ---
 
-## RM-COMP-010: Fixing Unused Components and Context Variables
+## RM-COMP-008: Fixing Unused Components and Context Variables
 
-**rule_id:** RM-COMP-010
+**rule_id:** RM-COMP-008
 **category:** maintainability
 **title:** Fixing unused components and context variables
-**description:** Step-by-step guidance for resolving RULE-COMP-010 by removing unused components and orphaned context variables.
+**description:** Step-by-step guidance for resolving RULE-COMP-008 by removing unused components and orphaned context variables.
 
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-010 for detection logic.
+**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-COMP-008 for detection logic.
 
-**impact:** Resolving RULE-COMP-010 reduces job size and eliminates confusion about whether unused items are intentional or orphaned.
+**impact:** Resolving RULE-COMP-008 reduces job size and eliminates confusion about whether unused items are intentional or orphaned.
 
 **classification:** Remediation — LOW severity
 **remediation:**

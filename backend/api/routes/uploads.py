@@ -21,9 +21,9 @@ async def upload_zip(file: Annotated[UploadFile, File(alias="file")]) -> UploadR
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def upload_zip_and_analyze(
-    file: Annotated[UploadFile, File(alias="file")],
+    files: Annotated[list[UploadFile], File(alias="file")],
 ) -> AnalysisCreateResponse:
-    return await execution_service.queue_zip_analysis(file)
+    return await execution_service.queue_zip_analysis(files)
 
 
 @router.post(
@@ -32,6 +32,6 @@ async def upload_zip_and_analyze(
     status_code=status.HTTP_200_OK,
 )
 async def upload_zip_and_execute(
-    file: Annotated[UploadFile, File(alias="file")],
+    files: Annotated[list[UploadFile], File(alias="file")],
 ) -> AnalysisExecutionResponse:
-    return await execution_service.execute_zip_analysis(file)
+    return await execution_service.execute_zip_analysis(files)

@@ -148,6 +148,27 @@
 
 ---
 
+---
+
+## RULE-SEC-009: Unsecured Context Variable Loading from External Files
+
+**rule_id:** RULE-SEC-009
+**category:** security
+**title:** Unsecured context variable loading from external files
+**description:** Context groups containing sensitive variables (passwords, secrets, tokens) are loaded from external property files rather than encrypted built-in storage. External files bypass Talend's built-in encryption and may be readable by unauthorized personnel.
+
+**detection_logic:** Scan each context group for an `external_file_path` attribute indicating it loads from a `.properties` file. If the group contains parameters whose names match sensitive patterns (`password`, `secret`, `token`, `api_key`, `apikey`, `pwd`, `passwd`, `access_key`, `client_secret`, `auth_token`), flag the inventory. This is an inventory-level check.
+
+**impact:** Sensitive context values loaded from external property files can be read by anyone with file system access to the Talend runtime or CI/CD pipeline. Unlike Talend's built-in encrypted context storage, external files provide no encryption at rest, violating compliance standards (SOC2, PCI-DSS, SOX, HIPAA). This is an inventory-level security finding with immediate remediation priority.
+
+**classification:** Risk — Credential exposure path that requires file system access to exploit.
+
+**remediation:** Move sensitive context variables from external property files to Talend's built-in encrypted context storage. Enable encryption on each sensitive variable within the context group editor (key icon). If external files are required for operational reasons, ensure they are encrypted at rest and have restricted file system permissions (0600 or less). Consider using vault-backed secret storage integration.
+
+**source:** Talend Health Analyzer security rule engine
+
+---
+
 ## Severity Classification Guide
 
 | Severity | Criteria | Examples |

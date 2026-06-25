@@ -19,15 +19,17 @@ class ZipAgent(BaseAgent):
         context: AgentContext,
         started_at: datetime,
     ) -> AgentResponse:
+        upload_paths = [context.upload_path, *context.additional_upload_paths] if context.upload_path else context.additional_upload_paths
         extraction_result = await asyncio.to_thread(
             self.extractor.extract,
             context.analysis_id,
-            context.upload_path,
+            upload_paths,
         )
 
         self.logger.info(
-            "Extracted %s files for analysis %s into %s",
+            "Extracted %s files from %s archive(s) for analysis %s into %s",
             extraction_result["file_count"],
+            extraction_result.get("archive_count", 1),
             context.analysis_id,
             extraction_result["workspace_path"],
         )
@@ -44,7 +46,7 @@ class ZipAgent(BaseAgent):
                 )
             ],
             metrics={
-                "archives_processed": 1,
+                "archives_processed": extraction_result.get("archive_count", 1),
                 "files_extracted": extraction_result["file_count"],
             },
         )

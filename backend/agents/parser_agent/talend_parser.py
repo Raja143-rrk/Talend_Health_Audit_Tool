@@ -1,8 +1,10 @@
 from pathlib import Path
 from xml.etree.ElementTree import Element, ParseError
 
-from backend.core.logging import get_logger
 from backend.agents.parser_agent.models import (
+    Connection,
+    ContextGroup,
+    ContextParameter,
     TalendComponent,
     TalendJob,
     TalendProjectInventory,
@@ -14,6 +16,7 @@ from backend.agents.parser_agent.xml_utils import (
     local_name,
     parse_xml_file,
 )
+from backend.core.logging import get_logger
 
 SOURCE_HINTS = (
     "input",
@@ -97,6 +100,7 @@ class TalendParser:
                 inventory.jobs.append(job)
                 inventory.components.extend(job.components)
                 inventory.contexts.extend(job.contexts)
+                inventory.context_groups.extend(job.context_groups)
                 inventory.source_systems.extend(job.source_systems)
                 inventory.target_systems.extend(job.target_systems)
                 inventory.disabled_components.extend(job.disabled_components)
@@ -108,6 +112,7 @@ class TalendParser:
         inventory.target_systems = sorted(set(inventory.target_systems))
         inventory.job_names = sorted(job.name for job in inventory.jobs)
         inventory.total_jobs = len(inventory.job_names)
+        self._classify_jobs(inventory)
         logger.info(
             "[COUNT-DEBUG] Final parser counts: total_jobs=%s job_names=%s total_components=%s",
             inventory.total_jobs,
@@ -115,6 +120,29 @@ class TalendParser:
             len(inventory.components),
         )
         return inventory
+
+    def _classify_jobs(self, inventory: TalendProjectInventory) -> None:
+        called_jobs: set[str] = set()
+        for job in inventory.jobs:
+            for comp in job.components:
+                if comp.component_name == "tRunJob":
+                    subjob = comp.parameters.get("PROCESS") or ""
+                    if subjob:
+                        called_jobs.add(subjob)
+
+        for job in inventory.jobs:
+            has_trunjob = any(c.component_name == "tRunJob" for c in job.components)
+            is_called = job.name in called_jobs
+            if has_trunjob and is_called:
+                job.job_type = "master"
+                job.subjob_name = job.name
+            elif has_trunjob:
+                job.job_type = "master"
+            elif is_called:
+                job.job_type = "subjob"
+                job.subjob_name = job.name
+            else:
+                job.job_type = "standalone"
 
     def _parse_project_files(
         self,
@@ -174,7 +202,9 @@ class TalendParser:
 
         job_name = metadata.get("name") or item_file.stem
         components = self._parse_components(root, job_name=job_name, item_file=item_file)
+        connections = self._parse_connections(root)
         contexts = self._parse_contexts(root)
+        context_groups = self._parse_context_groups(root)
 
         source_systems = sorted(
             {
@@ -201,7 +231,9 @@ class TalendParser:
             item_type="job_design",
             version=metadata.get("version"),
             components=components,
+            connections=connections,
             contexts=contexts,
+            context_groups=context_groups,
             source_systems=source_systems,
             target_systems=target_systems,
             disabled_components=disabled_components,
@@ -277,6 +309,42 @@ class TalendParser:
             if name:
                 contexts.add(name)
         return sorted(contexts)
+
+    def _parse_context_groups(self, root: Element) -> list[ContextGroup]:
+        groups: list[ContextGroup] = []
+        for context in iter_by_local_name(root, "context"):
+            name = first_attr(context, "name", "context") or "Default"
+            file_path = first_attr(context, "filePath")
+            params: list[ContextParameter] = []
+            for param in iter_by_local_name(context, "contextParameter"):
+                p_name = first_attr(param, "name") or ""
+                p_value = first_attr(param, "value") or ""
+                p_prompt = first_attr(param, "prompt")
+                p_comment = first_attr(param, "comment")
+                p_encrypted = first_attr(param, "encrypted") or "false"
+                params.append(ContextParameter(
+                    name=p_name, value=p_value,
+                    prompt=p_prompt, comment=p_comment,
+                    encrypted=p_encrypted.lower() in {"true", "1", "yes"},
+                ))
+            groups.append(ContextGroup(name=name, parameters=params, external_file_path=file_path))
+        return groups
+
+    def _parse_connections(self, root: Element) -> list[Connection]:
+        connections: list[Connection] = []
+        for conn in iter_by_local_name(root, "nodeConnection"):
+            source = first_attr(conn, "source") or ""
+            target = first_attr(conn, "target") or ""
+            conn_type = first_attr(conn, "connectorType", "connectType") or "FLOW"
+            label = first_attr(conn, "label")
+            if source and target:
+                connections.append(Connection(
+                    source_id=source,
+                    target_id=target,
+                    connection_type=conn_type,
+                    label=label,
+                ))
+        return connections
 
     def _parse_parameters(self, node: Element) -> dict[str, str]:
         parameters: dict[str, str] = {}

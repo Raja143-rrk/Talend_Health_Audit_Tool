@@ -25,6 +25,7 @@ class AgentContext(BaseModel):
     analysis_id: str
     project_name: str = "Talend Health Analyzer"
     upload_path: str | None = None
+    additional_upload_paths: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

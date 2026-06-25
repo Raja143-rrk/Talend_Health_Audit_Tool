@@ -34,6 +34,10 @@ class DashboardAggregator:
         active_components, disabled_components = self._split_components(inventory)
         job_names = self._job_names(inventory)
         total_jobs = len(job_names)
+        subjob_names = self._job_names_by_type(inventory, "subjob")
+        master_job_names = self._job_names_by_type(inventory, "master")
+        total_subjobs = len(subjob_names)
+        total_master_jobs = len(master_job_names)
         total_components = len(active_components)
         total_disabled_components = len(disabled_components)
         self._log_count_debug(inventory, job_names, total_jobs, total_components)
@@ -45,6 +49,13 @@ class DashboardAggregator:
         compliance_grade = str(compliance_breakdown["grade"])
         compliance_maturity = str(compliance_breakdown.get("maturity", "standard"))
 
+        finding_counts = self._category_finding_counts(
+            all_findings, self.compliance_engine.rule_prefixes
+        )
+        display_score_breakdown = self._build_display_scores(
+            compliance_breakdown, finding_counts
+        )
+
         return DashboardResponse(
             analysis_id=str(context_payload.get("analysis_id")),
             project_name=str(
@@ -54,6 +65,10 @@ class DashboardAggregator:
             ),
             total_jobs=total_jobs,
             job_names=job_names,
+            total_subjobs=total_subjobs,
+            total_master_jobs=total_master_jobs,
+            subjob_names=subjob_names,
+            master_job_names=master_job_names,
             total_components=total_components,
             total_disabled_components=total_disabled_components,
             critical_issues=critical_issues,
@@ -71,7 +86,7 @@ class DashboardAggregator:
                 DashboardKpi(label="Performance Findings", value=len(performance_findings), severity="warning"),
             ],
             severity_summary=severity_summary,
-            score_breakdown=compliance_breakdown,
+            score_breakdown=display_score_breakdown,
             charts=self._chart_data(
                 inventory,
                 active_components,
@@ -142,6 +157,20 @@ class DashboardAggregator:
                 for job in jobs
                 if isinstance(job, dict)
                 and job.get("item_type") == "job_design"
+                and str(job.get("name") or "").strip()
+            }
+        )
+
+    def _job_names_by_type(self, inventory: dict, job_type: str) -> list[str]:
+        jobs = inventory.get("jobs", [])
+        if not isinstance(jobs, list):
+            return []
+        return sorted(
+            {
+                str(job.get("name"))
+                for job in jobs
+                if isinstance(job, dict)
+                and job.get("job_type") == job_type
                 and str(job.get("name") or "").strip()
             }
         )
@@ -267,6 +296,43 @@ class DashboardAggregator:
         for finding in performance_findings:
             counts[f"performance:{finding.get('category', 'unknown')}"] += 1
         return [{"name": name, "value": value} for name, value in counts.items()]
+
+    def _category_finding_counts(
+        self,
+        findings: list[dict],
+        rule_prefixes: dict[str, list[str]],
+    ) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for key, prefixes in rule_prefixes.items():
+            counts[key] = 0
+            for finding in findings:
+                rid = str(finding.get("rule_triggered") or "")
+                if rid and any(rid.startswith(p) for p in prefixes):
+                    counts[key] += 1
+        return counts
+
+    def _build_display_scores(
+        self,
+        compliance_breakdown: dict[str, Any],
+        finding_counts: dict[str, int],
+    ) -> dict[str, Any]:
+        category_scores = compliance_breakdown.get("category_scores", [])
+        display_scores = []
+        for cs in category_scores:
+            key = cs["key"]
+            count = finding_counts.get(key, 0)
+            display_scores.append({
+                **cs,
+                "passed_rules": 0,
+                "failed_rules": count,
+                "total_rules": count,
+                "finding_count": count,
+            })
+        display_scores.sort(key=lambda x: x["label"])
+        return {
+            **compliance_breakdown,
+            "category_scores": display_scores,
+        }
 
     def _remediation_mapping(self, findings: list[dict]) -> dict[str, str]:
         mapping: dict[str, str] = {}

@@ -11,9 +11,9 @@
 
 **detection_logic:** Parse all components within a job. Count instances of tJava, tJavaRow, and tJavaFlex where `activated` or `enabled` is true (active components only). If the count is 3 or greater, flag the job.
 
-**impact:** Custom Java components execute as user-written code that cannot be optimized by Talend's engine. They increase job compilation time, reduce runtime performance, complicate migration to other platforms, and create maintainability challenges. Excessive tJava usage prevents Talend from applying built-in performance optimizations such as automatic parallelization and memory management. This is an active job-level performance finding with a 5-point deduction.
+**impact:** Custom Java components execute as user-written code that cannot be optimized by Talend's engine. They increase job compilation time, reduce runtime performance, complicate migration to other platforms, and create maintainability challenges. Excessive tJava usage prevents Talend from applying built-in performance optimizations such as automatic parallelization and memory management. This is an active job-level performance finding with a 1-point deduction.
 
-**classification:** Risk — Significant performance impact; represents a memory bottleneck.
+**classification:** Advisory — Minor performance impact; design preference for native components.
 **remediation:** Audit custom Java components and classify each by purpose. Replace standard transformations with native Talend components (tMap expressions, routines). Extract remaining custom logic into reusable Talend routines. Consider splitting the job to isolate custom logic in a dedicated subjob. See Performance Remediation → Fixing Excessive Custom Java (RULE-PERF-001) for detailed steps.
 
 **source:** Talend Health Analyzer performance rule engine
@@ -29,9 +29,9 @@
 
 **detection_logic:** Parse all components within a job. Count instances of tMap where `activated` or `enabled` is true. If the count is 3 or greater, flag the job. Exclude tMap components used exclusively for simple pass-through (no expression or lookup configured).
 
-**impact:** Each additional tMap adds processing latency per row. Multiple tMaps loading the same lookup tables waste memory and initialization time. Complex multi-tMap jobs are harder to tune, debug, and migrate. In high-volume jobs (millions of rows), even small per-row overhead compounds into significant runtime increases. This is an active job-level performance finding with a 2-point deduction.
+**impact:** Each additional tMap adds processing latency per row. Multiple tMaps loading the same lookup tables waste memory and initialization time. Complex multi-tMap jobs are harder to tune, debug, and migrate. In high-volume jobs (millions of rows), even small per-row overhead compounds into significant runtime increases. This is an active job-level performance finding with a 1-point deduction.
 
-**classification:** Warning — Moderate performance impact; excessive tMap chain.
+**classification:** Advisory — Minor performance impact; design preference for consolidation.
 **remediation:** Analyze tMap dependencies: identify duplicated lookups and filters that could be pushed to SQL. Consolidate consecutive tMap components. Push filtering and aggregation to source database queries. See Performance Remediation → Fixing Heavy tMap Usage (RULE-PERF-002) for detailed steps.
 
 **source:** Talend Health Analyzer performance rule engine

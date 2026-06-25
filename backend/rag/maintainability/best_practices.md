@@ -52,7 +52,7 @@ Identify repeated patterns across jobs (identical tJava code, identical tMap con
 **description:**
 Use Talend Repository Metadata (Db Connections) for all database connections. Define the connection once — all jobs reference the same governed connection. Use context variables inside metadata connections for environment-specific values. Define file schemas once using Metadata → File Delimited or File XML. Drag metadata connections directly onto the job designer to auto-create correctly configured components. Use tSchemaComplianceCheck to validate incoming data against metadata schemas. Maintain a change log for metadata schema versions.
 
-**detection_logic:** Not applicable — this is a best practice guidance document. Active detection is performed by Maintainability Finding RULE-COMP-008.
+**detection_logic:** Not applicable — this is a best practice guidance document. Active detection is performed by Architecture Finding RULE-ARCH-006.
 
 **impact:**
 Governed metadata centralizes connection management — a single change propagates to all referencing jobs. Inline connections require updating every job individually, creating maintenance overhead and inconsistency risk.

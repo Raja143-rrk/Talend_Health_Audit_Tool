@@ -41,36 +41,44 @@ function validateZip(file: File) {
 export function ZipUploadPanel() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const selectFile = (nextFile: File | null) => {
+  const selectFiles = (nextFiles: FileList | null) => {
     setProgress(0);
     setSuccessMessage(null);
 
-    if (!nextFile) {
-      setFile(null);
+    if (!nextFiles || nextFiles.length === 0) {
+      setFiles([]);
       setError(null);
       return;
     }
 
-    const validationError = validateZip(nextFile);
-    if (validationError) {
-      setFile(null);
-      setError(validationError);
-      return;
+    const validFiles: File[] = [];
+    for (const f of Array.from(nextFiles)) {
+      const validationError = validateZip(f);
+      if (validationError) {
+        setFiles([]);
+        setError(validationError);
+        return;
+      }
+      validFiles.push(f);
     }
 
-    setFile(nextFile);
+    setFiles(validFiles);
     setError(null);
   };
 
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const submitUpload = async () => {
-    if (!file || isUploading) {
+    if (files.length === 0 || isUploading) {
       return;
     }
 
@@ -79,8 +87,9 @@ export function ZipUploadPanel() {
     setSuccessMessage(null);
 
     try {
-      const response = await uploadZipAndAnalyze(file, setProgress);
-      setSuccessMessage(`${response.upload.original_filename} uploaded and queued.`);
+      const response = await uploadZipAndAnalyze(files, setProgress);
+      const names = files.map((f) => f.name).join(", ");
+      setSuccessMessage(`${names} uploaded and queued.`);
       window.setTimeout(() => {
         router.push(`/dashboard?taskId=${encodeURIComponent(response.task_id)}`);
       }, 700);
@@ -108,9 +117,10 @@ export function ZipUploadPanel() {
         <input
           ref={inputRef}
           type="file"
+          multiple
           accept=".zip,application/zip,application/x-zip-compressed"
           className="sr-only"
-          onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
+          onChange={(event) => selectFiles(event.target.files)}
         />
 
         <button
@@ -128,7 +138,7 @@ export function ZipUploadPanel() {
           onDrop={(event) => {
             event.preventDefault();
             setIsDragging(false);
-            selectFile(event.dataTransfer.files[0] ?? null);
+            selectFiles(event.dataTransfer.files);
           }}
           className={[
             "flex min-h-72 w-full flex-col items-center justify-center rounded-lg border border-dashed px-6 text-center transition",
@@ -141,39 +151,44 @@ export function ZipUploadPanel() {
             <UploadCloud className="h-7 w-7" />
           </span>
           <span className="mt-5 text-base font-semibold text-slate-950 dark:text-white">
-            Drop ZIP archive here
+            Drop ZIP archives here
           </span>
           <span className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            or select a file from your machine
+            or select files from your machine (multiple allowed)
           </span>
         </button>
 
-        {file ? (
-          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300">
-                  <FileArchive className="h-5 w-5" />
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-950 dark:text-white">
-                    {file.name}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    {formatFileSize(file.size)}
-                  </p>
+        {files.length > 0 ? (
+          <div className="mt-5 space-y-3">
+            {files.map((f, index) => (
+              <div
+                key={index}
+                className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 dark:border-white/10 dark:bg-slate-950 dark:text-slate-300">
+                    <FileArchive className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-slate-950 dark:text-white">
+                      {f.name}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                      {formatFileSize(f.size)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeFile(index)}
+                    disabled={isUploading}
+                    className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
+                  >
+                    <X className="h-4 w-4" />
+                    Remove
+                  </button>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => selectFile(null)}
-                disabled={isUploading}
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
-              >
-                <X className="h-4 w-4" />
-                Remove
-              </button>
-            </div>
+            ))}
           </div>
         ) : null}
 
@@ -205,8 +220,8 @@ export function ZipUploadPanel() {
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
           <button
             type="button"
-            onClick={() => selectFile(null)}
-            disabled={isUploading || !file}
+            onClick={() => setFiles([])}
+            disabled={isUploading || files.length === 0}
             className="rounded-md border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-slate-100"
           >
             Clear
@@ -214,10 +229,10 @@ export function ZipUploadPanel() {
           <button
             type="button"
             onClick={submitUpload}
-            disabled={!file || isUploading}
+            disabled={files.length === 0 || isUploading}
             className="rounded-md bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400 dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200"
           >
-            {isUploading ? "Uploading" : "Submit ZIP"}
+            {isUploading ? "Uploading..." : `Submit ZIP${files.length > 1 ? "s" : ""}`}
           </button>
         </div>
       </div>

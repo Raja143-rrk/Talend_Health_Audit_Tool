@@ -16,9 +16,9 @@ class ExecutionService:
 
     async def queue_zip_analysis(
         self,
-        file: UploadFile,
+        files: list[UploadFile],
     ) -> AnalysisCreateResponse:
-        upload, record = await self._create_analysis_from_upload(file)
+        uploads, record = await self._create_analysis_from_uploads(files)
         asyncio.create_task(analysis_service.run_analysis(record.analysis_id))
 
         logger.info(
@@ -31,14 +31,14 @@ class ExecutionService:
             analysis_id=record.analysis_id,
             status=record.status.value,
             message="Analysis queued. Poll the status URL until the dashboard is ready.",
-            upload=upload.model_dump(),
+            upload=uploads[0].model_dump(),
             task_status_url=self._task_status_url(record),
             status_url=self._status_url(record),
             dashboard_url=self._dashboard_url(record),
         )
 
-    async def execute_zip_analysis(self, file: UploadFile) -> AnalysisExecutionResponse:
-        upload, record = await self._create_analysis_from_upload(file)
+    async def execute_zip_analysis(self, files: list[UploadFile]) -> AnalysisExecutionResponse:
+        uploads, record = await self._create_analysis_from_uploads(files)
 
         logger.info(
             "Starting synchronous end-to-end analysis task %s for analysis %s",
@@ -65,7 +65,7 @@ class ExecutionService:
             analysis_id=record.analysis_id,
             status=status,
             message=self._completion_message(status),
-            upload=upload.model_dump(),
+            upload=uploads[0].model_dump() if uploads else None,
             dashboard=dashboard,
             workflow=workflow,
             task_status_url=self._task_status_url(record),
@@ -73,18 +73,21 @@ class ExecutionService:
             dashboard_url=self._dashboard_url(record),
         )
 
-    async def _create_analysis_from_upload(self, file: UploadFile):
-        upload = await upload_service.save_zip(file)
+    async def _create_analysis_from_uploads(self, files: list[UploadFile]):
+        uploads = await upload_service.save_zips(files)
+        upload_paths = [u.path for u in uploads]
+        original_filenames = [u.original_filename for u in uploads]
         record = analysis_service.create_analysis(
-            upload_path=upload.path,
-            original_filename=upload.original_filename,
+            upload_paths=upload_paths,
+            original_filenames=original_filenames,
         )
         logger.info(
-            "Created analysis %s for uploaded ZIP %s",
+            "Created analysis %s for %d uploaded ZIP(s): %s",
             record.analysis_id,
-            upload.original_filename,
+            len(uploads),
+            ", ".join(original_filenames),
         )
-        return upload, record
+        return uploads, record
 
     def _task_status_url(self, record: AnalysisRecord) -> str:
         return f"/api/v1/tasks/{record.task_id}/status"

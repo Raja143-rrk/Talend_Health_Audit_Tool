@@ -4,9 +4,9 @@ from backend.shared.models import AgentFinding, AgentRecommendation, FindingSeve
 
 SCANNER_TO_RAG_RULE_MAP: dict[str, str] = {
     "SEC-PASSWORD-001": "RULE-SEC-001",
-    "SEC-USERNAME-001": "RULE-SEC-008",
-    "SEC-APIKEY-001": "RULE-SEC-005",
-    "SEC-TOKEN-001": "RULE-SEC-005",
+    "SEC-USERNAME-001": "RULE-SEC-007",
+    "SEC-APIKEY-001": "RULE-SEC-004",
+    "SEC-TOKEN-001": "RULE-SEC-004",
     "SEC-JDBC-001": "RULE-SEC-002",
 }
 
@@ -126,7 +126,7 @@ class SecurityScanner:
         rule_ids = {finding.rule_triggered for finding in findings}
         recommendations: list[AgentRecommendation] = []
 
-        if {"RULE-SEC-001", "RULE-SEC-005"} & rule_ids:
+        if {"RULE-SEC-001", "RULE-SEC-004"} & rule_ids:
             rag_severity = resolve_severity("RULE-SEC-001")
             recommendations.append(
                 AgentRecommendation(
@@ -158,8 +158,8 @@ class SecurityScanner:
                 )
             )
 
-        if "RULE-SEC-008" in rule_ids:
-            rag_severity = resolve_severity("RULE-SEC-008")
+        if "RULE-SEC-007" in rule_ids:
+            rag_severity = resolve_severity("RULE-SEC-007")
             recommendations.append(
                 AgentRecommendation(
                     id="SEC-REC-003",
@@ -167,7 +167,7 @@ class SecurityScanner:
                     category="security",
                     severity=rag_severity,
                     priority="P3",
-                    rule_triggered="RULE-SEC-008",
+                    rule_triggered="RULE-SEC-007",
                     rationale="Static usernames reduce deployment portability and auditability.",
                     action="Replace literal usernames with context variables resolved at runtime.",
                     expected_impact="Improves environment separation and access review traceability.",

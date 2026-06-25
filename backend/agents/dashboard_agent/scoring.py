@@ -365,13 +365,17 @@ def _resolve_compliance_grade_thresholds(
 
 
 class ComplianceScoringEngine:
-    """Computes compliance score based on (Passed Rules / Total Applicable Rules) * 100 per category."""
+    """Computes compliance score based on (Passed Objective Rules / Total Objective Applicable Rules) * 100 per category.
+    Advisory rules are excluded from scoring and reported separately."""
 
     def __init__(self, client_id: str | None = None) -> None:
         self.client_id = client_id
         config = _SCORING_CONFIG_DATA
         self.rule_prefixes = _resolve_compliance_rule_prefixes(config, client_id)
         self.grade_thresholds = _resolve_compliance_grade_thresholds(config, client_id)
+        self.advisory_rule_ids: set[str] = set(
+            config.get("compliance", {}).get("advisory_rule_ids", [])
+        )
 
     def grade_for_score(self, score: int) -> str:
         for threshold, grade in self.grade_thresholds:
@@ -402,36 +406,51 @@ class ComplianceScoringEngine:
         category_scores: list[dict[str, Any]] = []
         total_passed = 0
         total_applicable = 0
+        all_advisory_failed: list[str] = []
 
         for raw_cat in raw_categories:
             key = raw_cat["key"]
             label = raw_cat["label"]
             all_rules = self._rules_for_category(key)
-            total = len(all_rules)
 
-            failed_in_cat = [
-                rid for rid in all_rules if rid in failed_rule_ids
+            objective_rules = [
+                rid for rid in all_rules if rid not in self.advisory_rule_ids
             ]
-            failed_count = len(failed_in_cat)
-            passed_count = total - failed_count
+            advisory_rules_in_cat = [
+                rid for rid in all_rules if rid in self.advisory_rule_ids
+            ]
 
-            if total > 0:
-                score = round((passed_count / total) * 100)
+            total_objective = len(objective_rules)
+
+            failed_objective = [
+                rid for rid in objective_rules if rid in failed_rule_ids
+            ]
+            failed_advisory = [
+                rid for rid in advisory_rules_in_cat if rid in failed_rule_ids
+            ]
+            failed_count = len(failed_objective)
+            passed_count = total_objective - failed_count
+
+            if total_objective > 0:
+                score = round((passed_count / total_objective) * 100)
             else:
                 score = 100
 
             total_passed += passed_count
-            total_applicable += total
+            total_applicable += total_objective
+            all_advisory_failed.extend(failed_advisory)
 
             category_scores.append({
                 "key": key,
                 "label": label,
                 "score": score,
                 "grade": self.grade_for_score(score),
-                "total_rules": total,
+                "total_rules": total_objective,
                 "passed_rules": passed_count,
                 "failed_rules": failed_count,
-                "failed_rule_ids": sorted(failed_in_cat),
+                "failed_rule_ids": sorted(failed_objective),
+                "advisory_failed_rule_ids": sorted(failed_advisory),
+                "advisory_total": len(advisory_rules_in_cat),
             })
 
         overall = round(
@@ -447,4 +466,6 @@ class ComplianceScoringEngine:
             "total_rules_evaluated": total_applicable,
             "total_passed": total_passed,
             "total_failed": total_applicable - total_passed,
+            "advisory_failed_ids": sorted(all_advisory_failed),
+            "advisory_total": len(all_advisory_failed),
         }

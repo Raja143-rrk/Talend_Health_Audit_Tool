@@ -30,11 +30,15 @@ class CategoryScore(BaseModel):
     label: str
     score: int
     grade: str
+    total_rules: int = 0
+    passed_rules: int = 0
+    failed_rules: int = 0
 
 
 class ScoreBreakdown(BaseModel):
     overall_score: int
     grade: str
+    maturity: str = "standard"
     category_scores: list[CategoryScore] = Field(default_factory=list)
 
 
@@ -64,6 +68,10 @@ class DashboardSummaryResponse(BaseModel):
     environment: str
     total_jobs: int = 0
     job_names: list[str] = Field(default_factory=list)
+    total_subjobs: int = 0
+    total_master_jobs: int = 0
+    subjob_names: list[str] = Field(default_factory=list)
+    master_job_names: list[str] = Field(default_factory=list)
     compliance_score: int = 100
     compliance_grade: str = "Optimized"
     compliance_maturity: str = "standard"
@@ -114,6 +122,7 @@ class Finding(BaseModel):
     impact: str = ""
     recommendation: str
     remediation: str | None = None
+    subjob_name: str = ""
     evidence: dict[str, Any] = Field(default_factory=dict)
 
 

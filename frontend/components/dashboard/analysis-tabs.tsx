@@ -39,12 +39,13 @@ type AnalysisRow = {
   id: string;
   name: string;
   jobName: string;
+  subjobName?: string | null;
   componentName: string;
   componentType: string;
   category: string;
   severity: Severity;
   ruleTriggered: string;
-  impact: string;
+  issueDescription: string;
   recommendation: string;
   evidence: Record<string, unknown>;
 };
@@ -113,12 +114,13 @@ function findingToRow(finding: DashboardFinding): AnalysisRow {
     id: finding.id,
     name: finding.name,
     jobName: finding.job_name,
+    subjobName: finding.subjob_name || undefined,
     componentName: finding.component_name,
     componentType: finding.component_type,
     category: finding.category,
     severity: normalizeSeverity(finding.severity),
     ruleTriggered: finding.rule_triggered,
-    impact: finding.impact,
+    issueDescription: finding.impact || finding.recommendation || finding.name,
     recommendation: finding.recommendation,
     evidence: finding.evidence,
   };
@@ -134,7 +136,7 @@ function recommendationToRow(recommendation: DashboardRecommendation): AnalysisR
     category: recommendation.category,
     severity: normalizeSeverity(recommendation.severity),
     ruleTriggered: recommendation.rule_triggered ?? "recommendation",
-    impact: recommendation.suggestion || recommendation.expected_impact,
+    issueDescription: recommendation.suggestion || recommendation.expected_impact,
     recommendation: recommendation.suggestion,
     evidence: {
       finding_id: recommendation.finding_id,
@@ -163,33 +165,13 @@ function componentToRow(component: ComponentDrillDown): AnalysisRow {
     category: Array.from(new Set(categories)).join(", ") || "component",
     severity: highestSeverity,
     ruleTriggered: Array.from(new Set(rules)).join(", ") || "none",
-    impact: `${component.findings.length} findings mapped to this component.`,
+    issueDescription: `${component.findings.length} findings mapped to this component.`,
     recommendation: `${component.recommendations.length} recommendations mapped to this component.`,
     evidence: {
       findings: component.findings.length,
       recommendations: component.recommendations.length,
     },
   };
-}
-
-function evidenceSummary(row: AnalysisRow) {
-  const ruleId = row.evidence.rule_id;
-  const severity = row.evidence.severity;
-  const findingId = row.evidence.finding_id;
-
-  if (typeof ruleId === "string" && ruleId.trim()) {
-    return ruleId;
-  }
-
-  if (typeof findingId === "string" && findingId.trim()) {
-    return findingId;
-  }
-
-  if (typeof severity === "string" && severity.trim()) {
-    return severity;
-  }
-
-  return row.category || "Available";
 }
 
 function componentGroups(rows: AnalysisRow[]) {
@@ -296,7 +278,7 @@ export function AnalysisTabs({
             row.componentType,
             row.category,
             row.ruleTriggered,
-            row.impact,
+            row.issueDescription,
             row.recommendation,
           ]
             .join(" ")
@@ -464,9 +446,7 @@ export function AnalysisTabs({
                     </button>
                   </th>
                 ))}
-                {activeTab !== "security" && activeTab !== "recommendations" ? (
-                  <th className="px-4 py-3 font-semibold">Evidence</th>
-                ) : null}
+                <th className="px-4 py-3 font-semibold">Issue Description</th>
                 <th className="px-4 py-3 font-semibold">Recommendation</th>
               </tr>
             </thead>
@@ -490,7 +470,14 @@ export function AnalysisTabs({
                       </p>
                     </td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
-                      {row.jobName}
+                      <div className="flex items-center gap-2">
+                        {row.jobName}
+                        {row.subjobName ? (
+                          <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">
+                            subjob
+                          </span>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
                       {row.componentName}
@@ -509,16 +496,11 @@ export function AnalysisTabs({
                         {row.ruleTriggered}
                       </td>
                     ) : null}
-                    {activeTab !== "security" && activeTab !== "recommendations" ? (
-                      <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
-                        <div className="max-w-xs space-y-1">
-                          <p>{row.impact}</p>
-                          <p className="text-xs text-slate-500 dark:text-slate-400">
-                            {evidenceSummary(row)}
-                          </p>
-                        </div>
-                      </td>
-                    ) : null}
+                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
+                      <div className="max-w-xs">
+                        <p>{row.issueDescription}</p>
+                      </div>
+                    </td>
                     <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
                       {row.recommendation}
                     </td>
@@ -576,7 +558,7 @@ export function AnalysisTabs({
                       <SeverityBadge severity={row.severity} />
                     </td>
                     <td className="px-4 py-4 text-amber-800 dark:text-amber-200">{row.ruleTriggered}</td>
-                    <td className="px-4 py-4 text-amber-800 dark:text-amber-200">{row.impact}</td>
+                    <td className="px-4 py-4 text-amber-800 dark:text-amber-200">{row.issueDescription}</td>
                     <td className="px-4 py-4 text-amber-800 dark:text-amber-200">{row.recommendation}</td>
                   </tr>
                 ))}

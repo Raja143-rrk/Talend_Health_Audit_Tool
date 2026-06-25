@@ -1,10 +1,10 @@
-from datetime import datetime
 import asyncio
+from datetime import datetime
 from pathlib import Path
 
 from backend.agents.base import BaseAgent
-from backend.shared.models import AgentArtifact, AgentContext, AgentResponse
 from backend.agents.parser_agent.talend_parser import TalendParser
+from backend.shared.models import AgentArtifact, AgentContext, AgentResponse
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 

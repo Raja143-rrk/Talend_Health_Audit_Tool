@@ -2,8 +2,29 @@ from backend.rule_engine.models import (
     RuleCategory,
     RuleDefinition,
     RuleScope,
-    RuleThreshold,
 )
+
+_PROD_NAMES = {"prod", "production", "live", "prd"}
+
+
+def _has_cross_env_exposure(inventory: dict) -> bool:
+    groups = inventory.get("context_groups", [])
+    non_prod = [g for g in groups if g.get("name", "").lower() not in _PROD_NAMES]
+    if not non_prod:
+        return False
+    for group in non_prod:
+        for param in group.get("parameters", []):
+            val = str(param.get("value", "")).lower()
+            if any(hint in val for hint in ("prod", "production", "live", "prd")):
+                return True
+    return False
+
+
+_SENSITIVE_PARAM_NAMES = {"password", "passwd", "pwd", "secret", "token", "api_key", "apikey", "access_key", "auth_token", "client_secret"}
+
+
+def _is_sensitive_param_name(name: str) -> bool:
+    return any(kw in name.lower() for kw in _SENSITIVE_PARAM_NAMES)
 
 
 def has_sensitive_parameter(component: dict, keywords: set[str]) -> bool:
@@ -13,6 +34,20 @@ def has_sensitive_parameter(component: dict, keywords: set[str]) -> bool:
         normalized_value = str(value).lower()
         if any(keyword in normalized_name for keyword in keywords) and normalized_value:
             return True
+    return False
+
+
+_UNSECURED_LOAD_SENSITIVE_NAMES = {"password", "secret", "token", "api_key", "apikey", "pwd", "passwd", "access_key", "client_secret", "auth_token"}
+
+
+def _has_unsecured_context_loading(inventory: dict) -> bool:
+    for group in inventory.get("context_groups", []):
+        if not group.get("external_file_path"):
+            continue
+        for param in group.get("parameters", []):
+            param_name = str(param.get("name", "")).lower()
+            if any(kw in param_name for kw in _UNSECURED_LOAD_SENSITIVE_NAMES):
+                return True
     return False
 
 
@@ -43,16 +78,6 @@ SECURITY_RULES = [
     ),
     RuleDefinition(
         id="RULE-SEC-003",
-        title="High number of security findings",
-        category=RuleCategory.SECURITY,
-        scope=RuleScope.INVENTORY,
-        description="The analysis contains more security findings than the configured threshold.",
-        remediation="Prioritize risk and critical risk security findings before release.",
-        thresholds=[RuleThreshold(field="security_findings_count", operator=">", value=5)],
-        predicate=lambda inventory, _: len(inventory.get("security_findings", [])) > 5,
-    ),
-    RuleDefinition(
-        id="RULE-SEC-004",
         title="Missing or unencrypted credential context variables",
         category=RuleCategory.SECURITY,
         scope=RuleScope.INVENTORY,
@@ -61,7 +86,7 @@ SECURITY_RULES = [
         predicate=lambda inventory, _: len(inventory.get("contexts", [])) == 0,
     ),
     RuleDefinition(
-        id="RULE-SEC-005",
+        id="RULE-SEC-004",
         title="API key or token exposed in component",
         category=RuleCategory.SECURITY,
         scope=RuleScope.COMPONENT,
@@ -73,7 +98,7 @@ SECURITY_RULES = [
         ),
     ),
     RuleDefinition(
-        id="RULE-SEC-006",
+        id="RULE-SEC-005",
         title="Insecure database connection configuration",
         category=RuleCategory.SECURITY,
         scope=RuleScope.COMPONENT,
@@ -86,12 +111,35 @@ SECURITY_RULES = [
         ),
     ),
     RuleDefinition(
-        id="RULE-SEC-007",
+        id="RULE-SEC-006",
         title="Cross-environment context exposure",
         category=RuleCategory.SECURITY,
         scope=RuleScope.INVENTORY,
         description="Production-like values detected in context variable defaults or non-production context files.",
         remediation="Create distinct context groups per environment. Move production values out of defaults.",
-        predicate=lambda inventory, _: False,
+        predicate=lambda inventory, _: _has_cross_env_exposure(inventory),
+    ),
+    RuleDefinition(
+        id="RULE-SEC-007",
+        title="Unencrypted sensitive context variables",
+        category=RuleCategory.SECURITY,
+        scope=RuleScope.INVENTORY,
+        description="Sensitive context variables (passwords, secrets, tokens) are stored without encryption enabled.",
+        remediation="Enable encryption on all sensitive context variables in the context group editor. Use vault-backed secret storage where available.",
+        predicate=lambda inventory, _: any(
+            _is_sensitive_param_name(str(param.get("name", "")))
+            and not bool(param.get("encrypted", False))
+            for group in inventory.get("context_groups", [])
+            for param in group.get("parameters", [])
+        ),
+    ),
+    RuleDefinition(
+        id="RULE-SEC-009",
+        title="Unsecured context variable loading from external files",
+        category=RuleCategory.SECURITY,
+        scope=RuleScope.INVENTORY,
+        description="Context groups containing sensitive variables (passwords, secrets, tokens) are loaded from external files rather than encrypted built-in storage.",
+        remediation="Move sensitive context variables to encrypted built-in context groups or use vault-backed secret storage. Ensure external property files are encrypted at rest.",
+        predicate=lambda inventory, _: _has_unsecured_context_loading(inventory),
     ),
 ]

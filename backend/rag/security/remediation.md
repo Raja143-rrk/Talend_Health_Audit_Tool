@@ -48,38 +48,16 @@
 
 ---
 
-## RM-SEC-003: Reducing Overall Security Findings
+## RM-SEC-003: Fixing Missing or Unencrypted Context Variables
 
 **rule_id:** RM-SEC-003
 **category:** security
-**title:** Reducing overall security findings
-**description:** Step-by-step guidance for resolving RULE-SEC-003 by reducing the total count of security findings below the threshold.
+**title:** Fixing missing or unencrypted context variables
+**description:** Step-by-step guidance for resolving RULE-SEC-003 by creating missing context variables and enabling encryption on sensitive ones.
 
 **detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-003 for detection logic.
 
-**impact:** Resolving RULE-SEC-003 demonstrates that security practices are consistently applied across the project, reducing breach risk and enabling compliance certification.
-
-**classification:** Remediation — HIGH severity
-**remediation:**
-1. Count all security findings and group by severity: CRITICAL first, then HIGH, then MEDIUM. Address all CRITICAL findings before touching any lower-severity issues. Set a target: reduce total security findings below the threshold of 5.
-2. Identify patterns: Are findings concentrated in specific jobs, teams, or connection types? Common root causes include: lack of developer training, missing context templates, copy-paste from tutorials, legacy jobs not updated. Develop a remediation plan targeting the root causes, not just individual findings.
-3. Create a shared context variable template for all new jobs. Add a security checklist to the job promotion process. Integrate the Talend Health Analyzer into your CI/CD pipeline to block builds with CRITICAL or HIGH security findings. Train all Talend developers on secure credential management.
-4. Schedule regular security scans using the analyzer. Track security finding counts over time to measure improvement. Set up alerts when new CRITICAL findings are introduced.
-
-**source:** Talend Health Analyzer remediation documentation
-
----
-
-## RM-SEC-004: Fixing Missing or Unencrypted Context Variables
-
-**rule_id:** RM-SEC-004
-**category:** security
-**title:** Fixing missing or unencrypted context variables
-**description:** Step-by-step guidance for resolving RULE-SEC-004 by creating missing context variables and enabling encryption on sensitive ones.
-
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-004 for detection logic.
-
-**impact:** Resolving RULE-SEC-004 ensures all credential references in component parameters are backed by properly defined encrypted context variables, closing a common security gap.
+**impact:** Resolving RULE-SEC-003 ensures all credential references in component parameters are backed by properly defined encrypted context variables, closing a common security gap.
 
 **classification:** Remediation — HIGH severity
 **remediation:**
@@ -92,20 +70,20 @@
 
 ---
 
-## RM-SEC-005: Fixing Exposed API Keys and Tokens
+## RM-SEC-004: Fixing Exposed API Keys and Tokens
 
-**rule_id:** RM-SEC-005
+**rule_id:** RM-SEC-004
 **category:** security
 **title:** Fixing exposed API keys and tokens
-**description:** Step-by-step guidance for resolving RULE-SEC-005 by securing API credentials in Talend REST components.
+**description:** Step-by-step guidance for resolving RULE-SEC-004 by securing API credentials in Talend REST components.
 
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-005 for detection logic.
+**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-004 for detection logic.
 
-**impact:** Resolving RULE-SEC-005 eliminates unauthorized API access risk and ensures API credentials are managed securely and rotated properly.
+**impact:** Resolving RULE-SEC-004 eliminates unauthorized API access risk and ensures API credentials are managed securely and rotated properly.
 
 **classification:** Remediation — CRITICAL severity
 **remediation:**
-1. Review findings for RULE-SEC-005 to identify all API components with exposed keys or tokens. Common locations: tRestClient headers, tRestRequest configuration, tHttpRequest URLs, tLibraryLoad initialization parameters. Note the service or API provider for each exposed credential.
+1. Review findings for RULE-SEC-004 to identify all API components with exposed keys or tokens. Common locations: tRestClient headers, tRestRequest configuration, tHttpRequest URLs, tLibraryLoad initialization parameters. Note the service or API provider for each exposed credential.
 2. For each exposed API key or token: revoke the current key/token through the provider's admin console. Generate a new key/token with the minimum required permissions. Record the rotation in your credential management system. Do not skip this step — exposed keys may have been captured in logs, exports, or developer workstations.
 3. Create encrypted context variables for each API credential: `context.api_client_id`, `context.api_client_secret`, `context.api_token`. For OAuth2 flows, store the client ID and client secret in encrypted context variables, not the access token (tokens are short-lived and obtained programmatically). Configure tRestClient to read credentials from context: set the Authorization header to `Bearer context.api_token`.
 4. In tRestClient/tRestRequest advanced settings: set connection timeout and read timeout via context variables. Disable `trustAllCertificates` in production (set to false). Configure proxy settings through context variables if needed. Never log request or response payloads in production — disable debug-level logging. Verify the API integration works in each environment after migration.
@@ -115,20 +93,20 @@
 
 ---
 
-## RM-SEC-006: Fixing Insecure Database Connections
+## RM-SEC-005: Fixing Insecure Database Connections
 
-**rule_id:** RM-SEC-006
+**rule_id:** RM-SEC-005
 **category:** security
 **title:** Fixing insecure database connections
-**description:** Step-by-step guidance for resolving RULE-SEC-006 by enabling TLS/SSL encryption on database connections per database type.
+**description:** Step-by-step guidance for resolving RULE-SEC-005 by enabling TLS/SSL encryption on database connections per database type.
 
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-006 for detection logic.
+**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-005 for detection logic.
 
-**impact:** Resolving RULE-SEC-006 ensures all data in transit between the Talend runtime and databases is encrypted, preventing network-level interception.
+**impact:** Resolving RULE-SEC-005 ensures all data in transit between the Talend runtime and databases is encrypted, preventing network-level interception.
 
 **classification:** Remediation — MEDIUM severity
 **remediation:**
-1. Review RULE-SEC-006 findings to list all database connections without encryption. Note the database type and the specific insecure parameters detected. Check whether the target database supports TLS/SSL connections.
+1. Review RULE-SEC-005 findings to list all database connections without encryption. Note the database type and the specific insecure parameters detected. Check whether the target database supports TLS/SSL connections.
 2. Configure TLS per database type:
    - **MySQL / MariaDB:** Add or set `useSSL=true` and `requireSSL=true`. Set `verifyServerCertificate=true` in production. Remove `allowPublicKeyRetrieval=true` if set.
    - **PostgreSQL:** Set `sslmode=require` or `sslmode=verify-full` in production. Use `sslmode=verify-full` with `sslrootcert` to validate the server certificate. Avoid `sslmode=disable`, `sslmode=allow`, or `sslmode=prefer`.
@@ -141,16 +119,16 @@
 
 ---
 
-## RM-SEC-007: Fixing Cross-Environment Context Exposure
+## RM-SEC-006: Fixing Cross-Environment Context Exposure
 
-**rule_id:** RM-SEC-007
+**rule_id:** RM-SEC-006
 **category:** security
 **title:** Fixing cross-environment context exposure
-**description:** Step-by-step guidance for resolving RULE-SEC-007 by separating environment-specific context values.
+**description:** Step-by-step guidance for resolving RULE-SEC-006 by separating environment-specific context values.
 
-**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-007 for detection logic.
+**detection_logic:** Not applicable — this is a remediation guidance document. Refer to RULE-SEC-006 for detection logic.
 
-**impact:** Resolving RULE-SEC-007 prevents production credential leakage to non-production environments and establishes a secure environment promotion workflow.
+**impact:** Resolving RULE-SEC-006 prevents production credential leakage to non-production environments and establishes a secure environment promotion workflow.
 
 **classification:** Remediation — MEDIUM severity
 **remediation:**

@@ -53,6 +53,13 @@ class UploadService:
             path=str(destination),
         )
 
+    async def save_zips(self, files: list[UploadFile]) -> list[UploadResponse]:
+        responses: list[UploadResponse] = []
+        for file in files:
+            response = await self.save_zip(file)
+            responses.append(response)
+        return responses
+
     def _copy_upload_file(self, file: UploadFile, destination: Path) -> None:
         with destination.open("wb") as output_file:
             total = 0

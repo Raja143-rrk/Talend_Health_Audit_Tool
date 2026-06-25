@@ -6,6 +6,7 @@ import {
   BarChart3,
   Bell,
   Bot,
+  Building2,
   ChevronLeft,
   Gauge,
   LayoutDashboard,
@@ -17,6 +18,7 @@ import {
   Sparkles,
   UserCircle,
   FileText,
+  Wrench,
 } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 
@@ -28,23 +30,27 @@ import { cn } from "@/lib/utils";
 export type DashboardSection =
   | "Dashboard"
   | "AI Chat"
-  | "Security"
-  | "Performance"
+  | "Architecture"
   | "Components"
+  | "Maintainability"
+  | "Performance"
   | "Recommendations"
   | "AI Agents"
   | "Reports"
+  | "Security"
   | "Settings";
 
 const menus = [
   { label: "Dashboard", icon: LayoutDashboard },
-  { label: "AI Chat", icon: Sparkles },
-  { label: "Security", icon: ShieldCheck },
-  { label: "Performance", icon: Gauge },
-  { label: "Components", icon: Package },
-  { label: "Recommendations", icon: Sparkles },
   { label: "AI Agents", icon: Bot },
+  { label: "AI Chat", icon: Sparkles },
+  { label: "Architecture", icon: Building2 },
+  { label: "Components", icon: Package },
+  { label: "Maintainability", icon: Wrench },
+  { label: "Performance", icon: Gauge },
+  { label: "Recommendations", icon: Sparkles },
   { label: "Reports", icon: FileText },
+  { label: "Security", icon: ShieldCheck },
   { label: "Settings", icon: Settings },
 ];
 
@@ -52,15 +58,20 @@ type DashboardLayoutProps = {
   children: ReactNode;
   activeSection?: DashboardSection;
   onSectionChange?: (section: DashboardSection) => void;
+  aiAgentsEnabled?: boolean;
 };
 
 export function DashboardLayout({
   children,
   activeSection = "Dashboard",
   onSectionChange,
+  aiAgentsEnabled = true,
 }: DashboardLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const visibleMenus = aiAgentsEnabled
+    ? menus
+    : menus.filter((item) => item.label !== "AI Agents");
 
   return (
     <div className="h-screen overflow-hidden bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-white">
@@ -114,7 +125,7 @@ export function DashboardLayout({
             </div>
 
             <nav className="mt-8 space-y-1">
-              {menus.map((item, index) => {
+              {visibleMenus.map((item, index) => {
                 const Icon = item.icon;
                 return (
                   <motion.button
