@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   BarChart3,
   Bell,
@@ -10,6 +11,7 @@ import {
   ChevronLeft,
   Gauge,
   LayoutDashboard,
+  List,
   Menu,
   Package,
   Search,
@@ -38,10 +40,12 @@ export type DashboardSection =
   | "AI Agents"
   | "Reports"
   | "Security"
-  | "Settings";
+  | "Settings"
+  | "Execution Logs";
 
 const menus = [
   { label: "Dashboard", icon: LayoutDashboard },
+  { label: "Execution Logs", icon: List },
   { label: "AI Agents", icon: Bot },
   { label: "AI Chat", icon: Sparkles },
   { label: "Architecture", icon: Building2 },
@@ -67,6 +71,7 @@ export function DashboardLayout({
   onSectionChange,
   aiAgentsEnabled = true,
 }: DashboardLayoutProps) {
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const visibleMenus = aiAgentsEnabled
@@ -142,7 +147,11 @@ export function DashboardLayout({
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.035 }}
                     onClick={() => {
-                      onSectionChange?.(item.label as DashboardSection);
+                      if (item.label === "Execution Logs") {
+                        router.push("/execution-logs");
+                      } else {
+                        onSectionChange?.(item.label as DashboardSection);
+                      }
                       setMobileOpen(false);
                     }}
                   >

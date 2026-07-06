@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.core.exceptions import AppError
@@ -14,6 +14,7 @@ from backend.schemas.dashboard import (
     DashboardSummaryResponse,
     Finding,
     FindingsResponse,
+    OperationalPerformanceMetrics,
     Recommendation,
     RecommendationsResponse,
 )
@@ -71,8 +72,99 @@ class DashboardService:
             recommendations=self.get_recommendations(record.analysis_id, job_name),
             security_findings=self.get_security_findings(record.analysis_id, job_name),
             performance_findings=self.get_performance_findings(record.analysis_id, job_name),
+            operational_performance=self._get_operational_performance_metrics(record),
             component_drilldown=self.get_component_drilldown(record.analysis_id, job_name),
             agents=self._get_agent_statuses(record),
+        )
+
+    def _get_operational_performance_metrics(self, record: AnalysisRecord) -> OperationalPerformanceMetrics:
+        from backend.execution_logs.storage.file_storage import FileStorage
+
+        storage = FileStorage()
+        all_records = storage.list_all()
+        logs_for_project = [r for r in all_records if r.project_id == record.analysis_id]
+
+        if logs_for_project:
+            try:
+                return self._compute_performance_from_logs(logs_for_project)
+            except Exception:
+                pass
+
+        perf_agent_output = self._agent_outputs(record).get("performance-agent", {})
+        metrics = perf_agent_output.get("metrics", {})
+        if isinstance(metrics, dict) and metrics.get("total_executions", 0) > 0:
+            return OperationalPerformanceMetrics(
+                performance_score=metrics.get("performance_score", 100),
+                performance_grade=metrics.get("performance_grade", "Optimized"),
+                overall_failure_rate=float(metrics.get("overall_failure_rate", 0.0)),
+                total_executions=int(metrics.get("total_executions", 0)),
+                total_failures=int(metrics.get("total_failures", 0)),
+                recurring_failures=int(metrics.get("recurring_failures", 0)),
+                average_duration_seconds=float(metrics.get("average_duration_seconds", 0.0)),
+                max_duration_seconds=float(metrics.get("max_duration_seconds", 0.0)),
+                average_restart_delay_hours=float(metrics.get("average_restart_delay_hours", 0.0)),
+                total_restarts=int(metrics.get("total_restarts", 0)),
+                top_5_longest_jobs=metrics.get("top_5_longest_jobs", []),
+                daily_trend=metrics.get("daily_trend", []),
+                failed_jobs_count=int(metrics.get("failed_jobs_count", 0)),
+                failed_executions=metrics.get("failed_executions", []),
+                error_groups=metrics.get("error_groups", {}),
+            )
+
+        return OperationalPerformanceMetrics()
+
+    def _compute_performance_from_logs(
+        self,
+        upload_records: list,
+    ) -> OperationalPerformanceMetrics:
+        from backend.agents.performance_agent.analyzer import PerformanceAnalyzer
+
+        raw_dicts: list[dict] = []
+        cutoff = datetime.now(timezone.utc) - timedelta(days=10)
+
+        for upload_rec in upload_records:
+            for entry in upload_rec.entries:
+                started_at = entry.start_time if hasattr(entry, "start_time") else getattr(entry, "started_at", None)
+                finished_at = entry.end_time if hasattr(entry, "end_time") else getattr(entry, "finished_at", None)
+
+                if started_at and isinstance(started_at, datetime):
+                    if started_at.tzinfo is None:
+                        started_at = started_at.replace(tzinfo=timezone.utc)
+                    if started_at < cutoff:
+                        continue
+
+                raw_dicts.append({
+                    "job_name": entry.job_name or "unknown",
+                    "status": (entry.status or "unknown").lower(),
+                    "started_at": started_at,
+                    "finished_at": finished_at if (hasattr(entry, "end_time") or hasattr(entry, "finished_at")) else None,
+                    "duration_seconds": entry.duration_seconds,
+                    "error_message": entry.error_message or "",
+                    "execution_id": entry.execution_id or "",
+                })
+
+        if not raw_dicts:
+            return OperationalPerformanceMetrics()
+
+        analyzer = PerformanceAnalyzer()
+        _, _, metrics = analyzer.analyze(raw_dicts)
+
+        return OperationalPerformanceMetrics(
+            performance_score=metrics.get("performance_score", 100),
+            performance_grade=metrics.get("performance_grade", "Optimized"),
+            overall_failure_rate=float(metrics.get("overall_failure_rate", 0.0)),
+            total_executions=int(metrics.get("total_executions", 0)),
+            total_failures=int(metrics.get("total_failures", 0)),
+            recurring_failures=int(metrics.get("recurring_failures", 0)),
+            average_duration_seconds=float(metrics.get("average_duration_seconds", 0.0)),
+            max_duration_seconds=float(metrics.get("max_duration_seconds", 0.0)),
+            average_restart_delay_hours=float(metrics.get("average_restart_delay_hours", 0.0)),
+            total_restarts=int(metrics.get("total_restarts", 0)),
+            top_5_longest_jobs=metrics.get("top_5_longest_jobs", []),
+            daily_trend=metrics.get("daily_trend", []),
+            failed_jobs_count=int(metrics.get("failed_jobs_count", 0)),
+            failed_executions=metrics.get("failed_executions", []),
+            error_groups=metrics.get("error_groups", {}),
         )
 
     def get_dashboard_summary(

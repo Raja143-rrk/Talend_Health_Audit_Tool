@@ -93,6 +93,37 @@ export type AgentInfo = {
   errors: string[];
 };
 
+export type DailyTrendPoint = {
+  date: string;
+  executions: number;
+  failures: number;
+};
+
+export type FailedExecution = {
+  job_name: string;
+  timestamp: string;
+  error_message: string;
+  execution_id: string;
+};
+
+export type OperationalPerformanceMetrics = {
+  performance_score: number;
+  performance_grade: string;
+  overall_failure_rate: number;
+  total_executions: number;
+  total_failures: number;
+  recurring_failures: number;
+  average_duration_seconds: number;
+  max_duration_seconds: number;
+  average_restart_delay_hours: number;
+  total_restarts: number;
+  top_5_longest_jobs: Array<{ job_name: string; average_duration_seconds: number }>;
+  daily_trend: DailyTrendPoint[];
+  failed_jobs_count: number;
+  failed_executions: FailedExecution[];
+  error_groups: Record<string, string[]>;
+};
+
 export type DashboardOverview = {
   analysis_id?: string | null;
   status: string;
@@ -133,6 +164,7 @@ export type DashboardOverview = {
     total: number;
     items: DashboardFinding[];
   };
+  operational_performance: OperationalPerformanceMetrics;
   component_drilldown: ComponentDrillDown[];
   agents: AgentInfo[];
 };

@@ -1,6 +1,13 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from backend.agents.performance_agent.operational.models import (
+    ExecutionLogEntry,
+    FailureFrequencyMetrics,
+    ExecutionLatencyMetrics,
+    RestartDelayMetrics,
+)
+
 
 @dataclass(frozen=True)
 class PerformanceRule:
@@ -9,7 +16,7 @@ class PerformanceRule:
     category: str
     recommendation: str
     optimization_suggestion: str
-    predicate: Callable[[dict], bool]
+    predicate: Callable[[list[ExecutionLogEntry]], bool]
 
 
 def component_name(component: dict) -> str:
@@ -30,34 +37,6 @@ def is_enabled(component: dict) -> bool:
     return not bool(component.get("disabled"))
 
 
-def is_tjava(component: dict) -> bool:
-    return component_name(component) in {"tjava", "tjavarow", "tjavaflex"}
-
-
-def is_row_processing(component: dict) -> bool:
-    name = component_name(component)
-    return name in {"tjavarow", "tflowtoiterate", "titeratetoflow"} or "row" in name
-
-
-def is_loop(component: dict) -> bool:
-    name = component_name(component)
-    return "loop" in name or name in {"tforeach", "tfilelist", "tloop"}
-
-
-def is_parallel_component(component: dict) -> bool:
-    name = component_name(component)
-    return name in {"tparallelize", "tpartitioner", "tcollector"}
-
-
-def is_input_or_output(component: dict) -> bool:
-    name = component_name(component)
-    return "input" in name or "output" in name
-
-
-def is_tmap(component: dict) -> bool:
-    return component_name(component) == "tmap"
-
-
 def commit_size(component: dict) -> int | None:
     raw_value = parameter_value(
         component,
@@ -68,7 +47,6 @@ def commit_size(component: dict) -> int | None:
     )
     if raw_value is None:
         return None
-
     try:
         return int(raw_value.strip('"'))
     except ValueError:
@@ -77,80 +55,93 @@ def commit_size(component: dict) -> int | None:
 
 DEFAULT_PERFORMANCE_RULES = [
     PerformanceRule(
-        id="PERF-TJAVA-001",
-        title="Excessive tJava usage",
-        category="excessive_tjava",
-        recommendation="Reduce custom Java components in favor of native Talend components.",
-        optimization_suggestion="Replace repeated tJava/tJavaRow/tJavaFlex logic with tMap, tFilterRow, tNormalize, reusable routines, or database pushdown where appropriate.",
-        predicate=lambda job: sum(
-            1 for component in job.get("components", []) if is_enabled(component) and is_tjava(component)
-        )
-        >= 3,
+        id="PERF-OP-001",
+        title="High failure rate detected",
+        category="failure_frequency",
+        recommendation="Investigate root cause of job failures and implement error handling.",
+        optimization_suggestion="Add retry logic, improve error handling, and set up monitoring alerts.",
+        predicate=lambda logs: _failure_rate(logs) > 20.0,
     ),
     PerformanceRule(
-        id="PERF-LOOP-001",
-        title="Nested or repeated loop processing detected",
-        category="nested_loops",
-        recommendation="Avoid nested iteration over row data in Talend jobs.",
-        optimization_suggestion="Replace nested loops with joins, lookups, tMap joins, database-side SQL, or pre-aggregated datasets.",
-        predicate=lambda job: sum(
-            1 for component in job.get("components", []) if is_enabled(component) and is_loop(component)
-        )
-        >= 2,
+        id="PERF-OP-002",
+        title="Recurring job failures detected",
+        category="recurring_failures",
+        recommendation="Review jobs with repeated failures and implement permanent fixes.",
+        optimization_suggestion="Analyze failure patterns, fix underlying issues, and add automated recovery.",
+        predicate=lambda logs: _recurring_failure_count(logs) > 0,
     ),
     PerformanceRule(
-        id="PERF-ROW-001",
-        title="Row-by-row processing pattern detected",
-        category="row_processing",
-        recommendation="Minimize row-by-row operations for high-volume flows.",
-        optimization_suggestion="Use set-based database operations, bulk components, tMap expressions, or batch-oriented processing instead of per-row Java/iterate flows.",
-        predicate=lambda job: any(
-            is_enabled(component) and is_row_processing(component)
-            for component in job.get("components", [])
-        ),
+        id="PERF-OP-003",
+        title="High execution latency detected",
+        category="execution_latency",
+        recommendation="Optimize long-running jobs to reduce execution time.",
+        optimization_suggestion="Review job design, add indexing, optimize queries, and consider parallel execution.",
+        predicate=lambda logs: _average_latency(logs) > 300.0,
     ),
     PerformanceRule(
-        id="PERF-PARALLEL-001",
-        title="Missing parallelization opportunity",
-        category="missing_parallelization",
-        recommendation="Evaluate parallel execution for independent source/target branches.",
-        optimization_suggestion="Use tParallelize, partitioning, or multi-thread execution only where branches are independent and target systems can handle concurrency.",
-        predicate=lambda job: (
-            sum(
-                1
-                for component in job.get("components", [])
-                if is_enabled(component) and is_input_or_output(component)
-            )
-            >= 4
-            and not any(
-                is_enabled(component) and is_parallel_component(component)
-                for component in job.get("components", [])
-            )
-        ),
+        id="PERF-OP-004",
+        title="Long restart delay detected",
+        category="restart_delay",
+        recommendation="Reduce time between failure and successful recovery.",
+        optimization_suggestion="Set up automated job restart, improve alerting, and define escalation paths.",
+        predicate=lambda logs: _average_restart_delay(logs) > 24.0,
     ),
     PerformanceRule(
-        id="PERF-COMMIT-001",
-        title="Commit size issue detected",
-        category="commit_size_issues",
-        recommendation="Tune commit and batch sizes for database output components.",
-        optimization_suggestion="Use larger commit intervals for bulk loads after validating rollback tolerance, logging requirements, and target database capacity.",
-        predicate=lambda job: any(
-            is_enabled(component)
-            and "output" in component_name(component)
-            and commit_size(component) is not None
-            and commit_size(component) <= 100
-            for component in job.get("components", [])
-        ),
-    ),
-    PerformanceRule(
-        id="PERF-TMAP-001",
-        title="Heavy tMap usage",
-        category="heavy_tmap_usage",
-        recommendation="Review complex tMap-heavy flows for maintainability and runtime cost.",
-        optimization_suggestion="Split very large mappings, push joins/filters to the source database, and reuse lookup datasets where possible.",
-        predicate=lambda job: sum(
-            1 for component in job.get("components", []) if is_enabled(component) and is_tmap(component)
-        )
-        >= 3,
+        id="PERF-OP-005",
+        title="Elevated failure rate in jobs",
+        category="failure_frequency",
+        recommendation="Review the top failing jobs and address recurring issues.",
+        optimization_suggestion="Prioritize fixes for jobs with highest failure rates.",
+        predicate=lambda logs: _job_count_with_failures(logs) > 0,
     ),
 ]
+
+
+def _failure_rate(logs: list[ExecutionLogEntry]) -> float:
+    if not logs:
+        return 0.0
+    failures = sum(1 for log in logs if log.status == "failure")
+    return (failures / len(logs)) * 100
+
+
+def _recurring_failure_count(logs: list[ExecutionLogEntry]) -> int:
+    from collections import Counter
+    counter = Counter(log.job_name for log in logs if log.status == "failure")
+    return sum(1 for count in counter.values() if count >= 3)
+
+
+def _average_latency(logs: list[ExecutionLogEntry]) -> float:
+    durations = [log.duration_seconds for log in logs if log.duration_seconds is not None]
+    if not durations:
+        return 0.0
+    return sum(durations) / len(durations)
+
+
+def _average_restart_delay(logs: list[ExecutionLogEntry]) -> float:
+    job_entries: dict[str, list[ExecutionLogEntry]] = {}
+    for log in logs:
+        if log.started_at is None:
+            continue
+        job_entries.setdefault(log.job_name, []).append(log)
+
+    delays: list[float] = []
+    for entries in job_entries.values():
+        entries.sort(key=lambda e: e.started_at)
+        last_failure = None
+        for entry in entries:
+            if entry.status == "failure" and entry.started_at:
+                last_failure = entry.started_at
+            elif entry.status == "success" and entry.started_at and last_failure is not None:
+                delay = (entry.started_at - last_failure).total_seconds() / 3600
+                if delay >= 0:
+                    delays.append(delay)
+                last_failure = None
+
+    if not delays:
+        return 0.0
+    return sum(delays) / len(delays)
+
+
+def _job_count_with_failures(logs: list[ExecutionLogEntry]) -> int:
+    job_names = set(log.job_name for log in logs if log.status == "failure")
+    return len(job_names)

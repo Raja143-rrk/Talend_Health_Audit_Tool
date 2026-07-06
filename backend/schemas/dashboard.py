@@ -170,6 +170,24 @@ class AgentStatusInfo(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class OperationalPerformanceMetrics(BaseModel):
+    performance_score: int = 100
+    performance_grade: str = "Optimized"
+    overall_failure_rate: float = 0.0
+    total_executions: int = 0
+    total_failures: int = 0
+    recurring_failures: int = 0
+    average_duration_seconds: float = 0.0
+    max_duration_seconds: float = 0.0
+    average_restart_delay_hours: float = 0.0
+    total_restarts: int = 0
+    top_5_longest_jobs: list[dict[str, Any]] = Field(default_factory=list)
+    daily_trend: list[dict[str, Any]] = Field(default_factory=list)
+    failed_jobs_count: int = 0
+    failed_executions: list[dict[str, Any]] = Field(default_factory=list)
+    error_groups: dict[str, list[str]] = Field(default_factory=dict)
+
+
 class DashboardOverviewResponse(BaseModel):
     analysis_id: str | None = None
     status: str
@@ -178,5 +196,6 @@ class DashboardOverviewResponse(BaseModel):
     recommendations: RecommendationsResponse
     security_findings: FindingsResponse
     performance_findings: FindingsResponse
+    operational_performance: OperationalPerformanceMetrics = Field(default_factory=OperationalPerformanceMetrics)
     component_drilldown: list[ComponentDrillDown] = Field(default_factory=list)
     agents: list[AgentStatusInfo] = Field(default_factory=list)

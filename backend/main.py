@@ -16,6 +16,7 @@ from backend.api.routes.chat import router as chat_router
 from backend.api.routes.dashboard import router as dashboard_router
 from backend.api.routes.health import router as health_router
 from backend.api.routes.tasks import router as tasks_router
+from backend.api.routes.execution_logs import router as execution_logs_router
 from backend.api.routes.uploads import router as uploads_router
 from backend.core.exceptions import register_exception_handlers
 from backend.core.logging import configure_logging, get_logger
@@ -64,3 +65,4 @@ app.include_router(analysis_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(dashboard_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
+app.include_router(execution_logs_router, prefix="/api/v1")
