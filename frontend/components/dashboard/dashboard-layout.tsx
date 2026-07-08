@@ -43,19 +43,42 @@ export type DashboardSection =
   | "Settings"
   | "Execution Logs";
 
-const menus = [
-  { label: "Dashboard", icon: LayoutDashboard },
-  { label: "Execution Logs", icon: List },
-  { label: "AI Agents", icon: Bot },
-  { label: "AI Chat", icon: Sparkles },
-  { label: "Architecture", icon: Building2 },
-  { label: "Components", icon: Package },
-  { label: "Maintainability", icon: Wrench },
-  { label: "Performance", icon: Gauge },
-  { label: "Recommendations", icon: Sparkles },
-  { label: "Reports", icon: FileText },
-  { label: "Security", icon: ShieldCheck },
-  { label: "Settings", icon: Settings },
+const menuGroups = [
+  {
+    label: "Home",
+    items: [{ label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Health Analysis",
+    items: [
+      { label: "Architecture", icon: Building2 },
+      { label: "Security", icon: ShieldCheck },
+      { label: "Performance", icon: Gauge },
+      { label: "Maintainability", icon: Wrench },
+    ],
+  },
+  {
+    label: "Project Management",
+    items: [
+      { label: "Execution Logs", icon: List },
+      { label: "Components", icon: Package },
+    ],
+  },
+  {
+    label: "AI Assistant",
+    items: [
+      { label: "AI Agents", icon: Bot },
+      { label: "AI Chat", icon: Sparkles },
+      { label: "Recommendations", icon: Sparkles },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { label: "Reports", icon: FileText },
+      { label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 type DashboardLayoutProps = {
@@ -74,9 +97,16 @@ export function DashboardLayout({
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const visibleMenus = aiAgentsEnabled
-    ? menus
-    : menus.filter((item) => item.label !== "AI Agents");
+  const visibleGroups = (
+    aiAgentsEnabled
+      ? menuGroups
+      : menuGroups
+          .map((group) => ({
+            ...group,
+            items: group.items.filter((item) => item.label !== "AI Agents"),
+          }))
+          .filter((group) => group.items.length > 0)
+  );
 
   return (
     <div className="h-screen overflow-hidden bg-slate-100 text-slate-950 dark:bg-slate-950 dark:text-white">
@@ -129,37 +159,52 @@ export function DashboardLayout({
               </Button>
             </div>
 
-            <nav className="mt-8 space-y-1">
-              {visibleMenus.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <motion.button
-                    key={item.label}
-                    type="button"
-                    className={cn(
-                      "flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition",
-                      item.label === activeSection
-                        ? "bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white",
-                      collapsed && "justify-center px-0",
-                    )}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.035 }}
-                    onClick={() => {
-                      if (item.label === "Execution Logs") {
-                        router.push("/execution-logs");
-                      } else {
-                        onSectionChange?.(item.label as DashboardSection);
-                      }
-                      setMobileOpen(false);
-                    }}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {!collapsed ? <span className="truncate">{item.label}</span> : null}
-                  </motion.button>
-                );
-              })}
+            <nav className="mt-6">
+              {(() => {
+                let itemIndex = 0;
+                return visibleGroups.map((group) => (
+                  <div key={group.label} className="mb-1">
+                    {!collapsed ? (
+                      <p className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                        {group.label}
+                      </p>
+                    ) : null}
+                    <div className="space-y-0.5">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const idx = itemIndex++;
+                        return (
+                          <motion.button
+                            key={item.label}
+                            type="button"
+                            className={cn(
+                              "flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-medium transition",
+                              item.label === activeSection
+                                ? "bg-slate-950 text-white shadow-sm dark:bg-white dark:text-slate-950"
+                                : "text-slate-600 hover:bg-slate-100 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white",
+                              collapsed && "justify-center px-0",
+                            )}
+                            initial={{ opacity: 0, x: -8 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: idx * 0.035 }}
+                            onClick={() => {
+                              if (item.label === "Execution Logs") {
+                                router.push("/execution-logs");
+                              } else {
+                                onSectionChange?.(item.label as DashboardSection);
+                              }
+                              setMobileOpen(false);
+                            }}
+                          >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            {!collapsed ? <span className="truncate">{item.label}</span> : null}
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
             </nav>
 
             <div className="mt-auto rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">

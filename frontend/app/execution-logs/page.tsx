@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence } from "framer-motion";
-import { FileIcon, UploadCloud, X } from "lucide-react";
+import { ArrowLeft, FileIcon, UploadCloud, X } from "lucide-react";
 
 import { ParsedRecordsModal } from "@/components/execution-logs/parsed-records-modal";
 import { ParserDiagnostics } from "@/components/execution-logs/parser-diagnostics";
@@ -178,6 +178,22 @@ export default function ExecutionLogsPage() {
           />
         )}
       </AnimatePresence>
+      <div className="mb-4">
+        <button
+          type="button"
+          onClick={() => {
+            if (window.history.length > 1) {
+              router.back();
+            } else {
+              router.push("/dashboard");
+            }
+          }}
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 dark:hover:text-white"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </button>
+      </div>
       <div className="space-y-6">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950">
           <div className="border-b border-slate-200 px-6 py-5 dark:border-white/10">
