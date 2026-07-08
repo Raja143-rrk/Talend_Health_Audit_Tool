@@ -9,10 +9,64 @@ export type ProjectInfo = {
 export type ExecutionLogUploadResponse = {
   id: string;
   project_id: string;
+  project_name: string;
   filename: string;
   original_filename: string;
   size_bytes: number;
   status: string;
+  entries_count: number;
+  execution_records_count: number;
+  duplicate_count: number;
+  log_date_from: string | null;
+  log_date_to: string | null;
+  validation_messages: Array<{ field: string; message: string; severity: string }>;
+  upload_date: string;
+  total_log_lines: number;
+  csv_rows_read: number;
+  execution_starts_found: number;
+  execution_ends_found: number;
+  parse_errors: number;
+  validation_warnings: number;
+};
+
+export type ExecutionRecordData = {
+  project_id: string;
+  project_name: string;
+  workspace_name: string;
+  environment_name: string;
+  plan_name: string;
+  artifact_name: string;
+  task_execution_id: string;
+  plan_execution_id: string;
+  remote_engine_name: string;
+  execution_start_time: string | null;
+  execution_end_time: string | null;
+  execution_status: string;
+  execution_duration_seconds: number | null;
+  error_message: string;
+  original_log_file_name: string;
+  upload_date: string | null;
+  source_file: string;
+};
+
+export type ProjectUploadSummary = {
+  project_id: string;
+  project_name: string;
+  upload_id: string;
+  original_filename: string;
+  upload_date: string | null;
+  status: string;
+  entries_count: number;
+  execution_records_count: number;
+  log_date_from: string | null;
+  log_date_to: string | null;
+  validation_messages: Array<{ field: string; message: string; severity: string }>;
+  total_log_lines: number;
+  csv_rows_read: number;
+  execution_starts_found: number;
+  execution_ends_found: number;
+  parse_errors: number;
+  validation_warnings: number;
 };
 
 export type ExecutionLogHistoryItem = {
@@ -91,4 +145,34 @@ export async function fetchUploadHistory(): Promise<ExecutionLogHistoryItem[]> {
     throw new Error("Failed to fetch upload history.");
   }
   return response.json() as Promise<ExecutionLogHistoryItem[]>;
+}
+
+export async function fetchExecutionRecords(
+  projectId: string,
+): Promise<ExecutionRecordData[]> {
+  try {
+    const response = await fetch(
+      `${appConfig.apiBaseUrl.replace(/\/$/, "")}/execution-logs/projects/${projectId}/records`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return [];
+    return (await response.json()) as ExecutionRecordData[];
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchProjectUploadSummary(
+  projectId: string,
+): Promise<ProjectUploadSummary | null> {
+  try {
+    const response = await fetch(
+      `${appConfig.apiBaseUrl.replace(/\/$/, "")}/execution-logs/projects/${projectId}/summary`,
+      { cache: "no-store" },
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as ProjectUploadSummary;
+  } catch {
+    return null;
+  }
 }

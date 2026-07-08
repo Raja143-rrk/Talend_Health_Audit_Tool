@@ -84,7 +84,7 @@ class PerformanceAnalyzer:
 
         findings = self._evaluate_rules(parsed_logs, operational_metrics)
         recommendations = self._build_recommendations(findings)
-        metrics = self._build_metrics(findings, operational_metrics)
+        metrics = self._build_metrics(findings, operational_metrics, daily_trend)
 
         logger.info(
             "Operational analysis complete: %d findings, score=%d",
@@ -249,6 +249,7 @@ class PerformanceAnalyzer:
         self,
         findings: list[AgentFinding],
         operational_metrics: OperationalMetrics,
+        daily_trend: list | None = None,
     ) -> dict:
         by_severity: dict[str, int] = {}
         by_category: dict[str, int] = {}
@@ -257,6 +258,7 @@ class PerformanceAnalyzer:
             by_category[finding.category] = by_category.get(finding.category, 0) + 1
 
         perf_score = operational_metrics.performance_score
+        trend = daily_trend if daily_trend is not None else []
 
         return {
             "performance_findings": len(findings),
@@ -270,10 +272,11 @@ class PerformanceAnalyzer:
             "recurring_failures": len(operational_metrics.failure_frequency.recurring_failures),
             "average_duration_seconds": operational_metrics.execution_latency.average_duration_seconds,
             "max_duration_seconds": operational_metrics.execution_latency.max_duration_seconds,
+            "min_duration_seconds": operational_metrics.execution_latency.min_duration_seconds,
             "average_restart_delay_hours": operational_metrics.restart_delay.average_delay_hours,
             "total_restarts": operational_metrics.restart_delay.total_restarts,
             "top_5_longest_jobs": operational_metrics.execution_latency.top_5_longest_jobs,
-            "daily_trend": daily_trend,
+            "daily_trend": trend,
             "failed_jobs_count": operational_metrics.failed_executions.total_failed_jobs,
             "failed_executions": operational_metrics.failed_executions.failed_jobs,
             "error_groups": operational_metrics.failed_executions.error_groups,
@@ -292,6 +295,7 @@ class PerformanceAnalyzer:
             "recurring_failures": 0,
             "average_duration_seconds": 0.0,
             "max_duration_seconds": 0.0,
+            "min_duration_seconds": 0.0,
             "average_restart_delay_hours": 0.0,
             "total_restarts": 0,
             "top_5_longest_jobs": [],

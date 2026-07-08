@@ -179,6 +179,7 @@ class OperationalPerformanceMetrics(BaseModel):
     recurring_failures: int = 0
     average_duration_seconds: float = 0.0
     max_duration_seconds: float = 0.0
+    min_duration_seconds: float = 0.0
     average_restart_delay_hours: float = 0.0
     total_restarts: int = 0
     top_5_longest_jobs: list[dict[str, Any]] = Field(default_factory=list)
@@ -186,6 +187,7 @@ class OperationalPerformanceMetrics(BaseModel):
     failed_jobs_count: int = 0
     failed_executions: list[dict[str, Any]] = Field(default_factory=list)
     error_groups: dict[str, list[str]] = Field(default_factory=dict)
+    has_execution_data: bool = False
 
 
 class DashboardOverviewResponse(BaseModel):

@@ -14,6 +14,9 @@ from backend.execution_logs.models import (
 from backend.execution_logs.parsers.factory import ParserFactory
 from backend.execution_logs.storage.base import BaseStorage
 from backend.execution_logs.upload_handler import upload_handler
+from backend.execution_logs.parser_engine.factory import parse_execution_log
+from backend.execution_logs.parser_engine.models import ExecutionRecordGroup
+from backend.execution_logs.records.service import get_execution_record_service
 
 logger = get_logger(__name__)
 
@@ -54,6 +57,17 @@ class LogProcessor:
             record.status = UploadStatus.COMPLETED if entries else UploadStatus.PARTIAL
             self._storage.save(record)
 
+            execution_group = self._parse_execution_records(
+                saved_path, project_id, project_name, record.filename,
+            )
+            service = get_execution_record_service()
+            if execution_group.records or execution_group.validation_messages:
+                stored = service.store_group(execution_group)
+                logger.info(
+                    "Stored %d execution records for upload %s",
+                    stored, record_id,
+                )
+
             logger.info(
                 "Processed upload %s for project %s: %s entries",
                 record_id,
@@ -68,6 +82,26 @@ class LogProcessor:
             raise AppError(f"Execution log processing failed: {exc}") from exc
 
         return record
+
+    def _parse_execution_records(
+        self,
+        file_path: Path,
+        project_id: str,
+        project_name: str,
+        filename: str,
+    ) -> ExecutionRecordGroup:
+        try:
+            content = file_path.read_bytes()
+            group = parse_execution_log(
+                content=content,
+                filename=filename,
+                project_id=project_id,
+                upload_date=datetime.now(timezone.utc),
+            )
+            return group
+        except Exception as exc:
+            logger.exception("Execution record parsing failed for %s", filename)
+            return ExecutionRecordGroup(project_id=project_id)
 
     def _parse(self, file_path: Path) -> list[ExecutionLogEntry]:
         parser = ParserFactory.get_parser(file_path)

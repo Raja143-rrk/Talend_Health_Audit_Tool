@@ -5,24 +5,13 @@ import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   Bug,
-  Clock,
   Download,
   FileText,
   Gauge,
   HardDrive,
   Layers,
-  TrendingUp,
-  Zap,
+  Search,
 } from "lucide-react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { AnalysisLoader } from "@/components/dashboard/analysis-loader";
@@ -30,19 +19,24 @@ import { AiAgentsSection } from "@/components/dashboard/ai-agents-section";
 import { AnalysisTabs } from "@/components/dashboard/analysis-tabs";
 import { AiChatPanel } from "@/components/dashboard/ai-chat-panel";
 import { AnalyticsChartGrid } from "@/components/dashboard/analytics-charts";
+import { JobFilter } from "@/components/dashboard/job-filter";
 import {
   DashboardLayout,
   type DashboardSection,
 } from "@/components/dashboard/dashboard-layout";
 import { KpiCard } from "@/components/dashboard/kpi-card";
 import { cn } from "@/lib/utils";
+import { PerformanceView } from "@/components/performance/performance-view";
 import {
   getDashboardOverview,
   type ComponentDrillDown,
   type DashboardFinding,
   type DashboardOverview,
-  type OperationalPerformanceMetrics,
 } from "@/lib/dashboard";
+import {
+  fetchProjectUploadSummary,
+  type ProjectUploadSummary,
+} from "@/lib/execution-logs";
 import type { AnalysisTaskStatus } from "@/lib/tasks";
 
 function SectionHeader({
@@ -95,12 +89,22 @@ function filterDrilldown(
 function ComponentsSection({
   dashboard,
   query = "",
+  jobName = "",
 }: {
   dashboard: DashboardOverview | null;
   query?: string;
+  jobName?: string;
 }) {
-  const normalizedQuery = query.trim().toLowerCase();
+  const [localQuery, setLocalQuery] = useState("");
+  const effectiveQuery = query || localQuery;
+  const normalizedQuery = effectiveQuery.trim().toLowerCase();
   const components = (dashboard?.component_drilldown ?? []).filter((component) => {
+    if (jobName && component.job_name !== jobName) {
+      return false;
+    }
+    if (component.component_name === component.job_name) {
+      return false;
+    }
     if (!normalizedQuery) {
       return true;
     }
@@ -123,6 +127,7 @@ function ComponentsSection({
   const disabledComponents = dashboard?.summary?.metrics?.find(
     (metric) => metric.label === "Disabled Components",
   )?.value ?? 0;
+  const activeComponents = totalComponents - disabledComponents;
   const issueCount = components.reduce((total, component) => total + component.findings.length, 0);
 
   return (
@@ -132,9 +137,21 @@ function ComponentsSection({
         title="Component inventory and usage"
         description="Review component distribution, impacted components, status, and mapped issues without security or performance detail duplication."
       />
+      <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+        <div className="relative max-w-xs flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={localQuery}
+            onChange={(e) => setLocalQuery(e.target.value)}
+            placeholder="Search components, jobs, rules..."
+            className="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 pl-9 text-sm text-slate-950 outline-none transition placeholder:text-slate-500 focus:border-cyan-600 focus:ring-2 focus:ring-cyan-600/15 dark:border-white/10 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-400"
+          />
+        </div>
+      </section>
       <section className="grid gap-4 md:grid-cols-4">
         {[
-          ["Active Components", totalComponents],
+          ["Active Components", activeComponents],
           ["Disabled Components", disabledComponents],
           ["Impacted Components", components.length],
           ["Mapped Issues", issueCount],
@@ -186,7 +203,7 @@ function ComponentsSection({
             </div>
           )) : (
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              No component inventory output available.
+              {jobName ? "No components found for the selected job." : "No component inventory output available."}
             </p>
           )}
         </div>
@@ -202,7 +219,7 @@ function ComponentsSection({
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-slate-100 text-xs uppercase text-slate-500 dark:bg-white/5 dark:text-slate-400">
               <tr>
-                {["Job", "Component", "Type", "Status", "Issues", "Rules"].map((label) => (
+                {["Job", "Component", "Type", "Status", "Issues"].map((label) => (
                   <th key={label} className="px-4 py-3 font-semibold">{label}</th>
                 ))}
               </tr>
@@ -220,14 +237,11 @@ function ComponentsSection({
                     {component.findings.length ? "Action required" : "Healthy"}
                   </td>
                   <td className="px-4 py-4">{component.findings.length}</td>
-                  <td className="px-4 py-4">
-                    {Array.from(new Set(component.findings.map((finding) => finding.rule_triggered))).join(", ") || "None"}
-                  </td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
-                    No component-level issues are available in the current dashboard output.
+                  <td colSpan={5} className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400">
+                    {jobName ? "No components found for the selected job." : "No component-level issues are available in the current dashboard output."}
                   </td>
                 </tr>
               )}
@@ -519,276 +533,13 @@ function ReportsSection({ dashboard }: { dashboard: DashboardOverview | null }) 
   );
 }
 
-function PerformanceTrendChart({ data }: { data: Array<{ date: string; executions: number; failures: number }> }) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="flex h-72 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white/50 text-sm text-slate-500 dark:border-white/10 dark:bg-white/5">
-        No trend data available for the last 10 days.
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data}>
-        <defs>
-          <linearGradient id="executionFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.35} />
-            <stop offset="95%" stopColor="#06b6d4" stopOpacity={0.03} />
-          </linearGradient>
-          <linearGradient id="failureFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.35} />
-            <stop offset="95%" stopColor="#ef4444" stopOpacity={0.03} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
-        <XAxis dataKey="date" tick={{ fontSize: 12 }} tickFormatter={(v: string) => v.slice(5)} />
-        <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
-        <Tooltip content={({ active, payload, label }) => {
-          if (!active || !payload?.length) return null;
-          return (
-            <div className="rounded-xl border border-slate-200/60 bg-white/90 px-4 py-2.5 text-sm shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/90">
-              <p className="mb-1.5 font-semibold">{label}</p>
-              {payload.map((entry) => (
-                <div key={entry.name} className="flex items-center gap-2">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                  <span className="text-slate-600 dark:text-slate-300">{entry.name}: {entry.value}</span>
-                </div>
-              ))}
-            </div>
-          );
-        }} />
-        <Area type="monotone" dataKey="executions" stroke="#06b6d4" fill="url(#executionFill)" strokeWidth={2.5} name="Executions" />
-        <Area type="monotone" dataKey="failures" stroke="#ef4444" fill="url(#failureFill)" strokeWidth={2.5} name="Failures" />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
-
-function PerformanceSection({
-  op,
-  recommendations,
-}: {
-  op?: OperationalPerformanceMetrics;
-  recommendations?: Array<{ id: string; title: string; suggestion: string; severity: string; priority: string }>;
-}) {
-  if (!op) {
-    return (
-      <SectionHeader
-        eyebrow="Performance"
-        title="Operational Performance Health"
-        description="No operational performance data available. Run an analysis with execution logs to see performance metrics."
-      />
-    );
-  }
-
-  const scoreTone = op.performance_score >= 80 ? "emerald" : op.performance_score >= 60 ? "amber" : "red";
-
-  return (
-    <div className="space-y-6">
-      <SectionHeader
-        eyebrow="Performance"
-        title="Operational Performance Health"
-        description="Execution health based on the last 10 days of runtime logs."
-      />
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          title="Performance Score"
-          value={op.performance_score}
-          suffix="%"
-          change={op.performance_grade}
-          tone={scoreTone}
-          icon={Zap}
-        />
-        <KpiCard
-          title="Total Executions"
-          value={op.total_executions}
-          tone="blue"
-          icon={TrendingUp}
-        />
-        <KpiCard
-          title="Total Failures"
-          value={op.total_failures}
-          tone="red"
-          icon={AlertTriangle}
-          subtitle={`${op.overall_failure_rate.toFixed(1)}% failure rate`}
-        />
-        <KpiCard
-          title="Avg Duration"
-          value={Math.round(op.average_duration_seconds)}
-          suffix="s"
-          tone="cyan"
-          icon={Clock}
-          subtitle={`Max ${Math.round(op.max_duration_seconds)}s`}
-        />
-      </section>
-
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          title="Recurring Failures"
-          value={op.recurring_failures}
-          subtitle="Jobs with 3+ failures"
-          tone="amber"
-          icon={Bug}
-        />
-        <KpiCard
-          title="Failed Jobs"
-          value={op.failed_jobs_count}
-          tone="red"
-          icon={AlertTriangle}
-        />
-        <KpiCard
-          title="Avg Restart Delay"
-          value={op.average_restart_delay_hours}
-          suffix="h"
-          tone="amber"
-          icon={Clock}
-        />
-        <KpiCard
-          title="Total Restarts"
-          value={op.total_restarts}
-          tone="blue"
-          icon={TrendingUp}
-          subtitle={`Min ${op.average_restart_delay_hours > 0 ? `${Math.min(...op.failed_executions.length ? [1] : [0])}h` : "N/A"}`}
-        />
-      </section>
-
-      {op.top_5_longest_jobs.length > 0 ? (
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950">
-          <div className="border-b border-slate-200 p-5 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-              Top 5 Longest Running Jobs
-            </p>
-            <h2 className="mt-2 text-xl font-semibold">Execution Latency</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[500px] text-left text-sm">
-              <thead className="bg-slate-100 text-xs uppercase text-slate-500 dark:bg-white/5 dark:text-slate-400">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">#</th>
-                  <th className="px-4 py-3 font-semibold">Job Name</th>
-                  <th className="px-4 py-3 font-semibold">Avg Duration (s)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {op.top_5_longest_jobs.map((job, idx) => (
-                  <tr key={job.job_name} className="border-t border-slate-200 dark:border-white/10">
-                    <td className="px-4 py-4 text-slate-500">{idx + 1}</td>
-                    <td className="px-4 py-4 font-semibold">{job.job_name}</td>
-                    <td className="px-4 py-4">{job.average_duration_seconds.toFixed(1)}s</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      ) : null}
-
-      {op.failed_executions.length > 0 ? (
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950">
-          <div className="border-b border-slate-200 p-5 dark:border-white/10">
-            <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-              Failed Executions
-            </p>
-            <h2 className="mt-2 text-xl font-semibold">Recent failures</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="bg-slate-100 text-xs uppercase text-slate-500 dark:bg-white/5 dark:text-slate-400">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Job Name</th>
-                  <th className="px-4 py-3 font-semibold">Failure Time</th>
-                  <th className="px-4 py-3 font-semibold">Error Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {op.failed_executions.slice(0, 20).map((exec) => (
-                  <tr key={`${exec.execution_id}-${exec.timestamp}`} className="border-t border-slate-200 dark:border-white/10">
-                    <td className="px-4 py-4 font-semibold">{exec.job_name}</td>
-                    <td className="px-4 py-4 text-slate-600 dark:text-slate-300">
-                      {exec.timestamp ? new Date(exec.timestamp).toLocaleString() : "N/A"}
-                    </td>
-                    <td className="max-w-md truncate px-4 py-4 text-red-600 dark:text-red-400">
-                      {exec.error_message || "No error message"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          {op.error_groups && Object.keys(op.error_groups).length > 0 ? (
-            <div className="border-t border-slate-200 p-5 dark:border-white/10">
-              <p className="mb-3 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-                Error Groups
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {Object.entries(op.error_groups).map(([error, jobs]) => (
-                  <div
-                    key={error}
-                    className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs dark:border-red-500/30 dark:bg-red-950/20"
-                  >
-                    <span className="font-semibold text-red-700 dark:text-red-400">{error}</span>
-                    <span className="ml-2 text-slate-500 dark:text-slate-400">
-                      {jobs.length} job{jobs.length !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
-
-      {op.daily_trend.length > 0 ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-950">
-          <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-            Performance Trend
-          </p>
-          <h2 className="mt-2 text-xl font-semibold">Last 10 days</h2>
-          <div className="mt-4 h-72">
-            <PerformanceTrendChart data={op.daily_trend} />
-          </div>
-        </section>
-      ) : null}
-
-      {recommendations && recommendations.length > 0 ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-white/10 dark:bg-slate-950">
-          <p className="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
-            Recommendations
-          </p>
-          <h2 className="mt-2 text-xl font-semibold">Operational improvements</h2>
-          <div className="mt-4 space-y-3">
-            {recommendations.slice(0, 10).map((rec) => {
-              const priorityColor = rec.priority === "P1" ? "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400" :
-                rec.priority === "P2" ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400" :
-                "bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400";
-              return (
-                <div
-                  key={rec.id}
-                  className="flex items-start gap-4 rounded-lg border border-slate-200 p-4 dark:border-white/10"
-                >
-                  <div className={`rounded-md px-2 py-1 text-xs font-semibold ${priorityColor}`}>
-                    {rec.priority}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-slate-950 dark:text-white">{rec.title}</p>
-                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{rec.suggestion}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      ) : null}
-    </div>
-  );
-}
-
 function DashboardPageContent() {
   const searchParams = useSearchParams();
   const taskId = searchParams.get("taskId");
-  const [activeSection, setActiveSection] = useState<DashboardSection>("Dashboard");
+  const sectionParam = searchParams.get("section");
+  const [activeSection, setActiveSection] = useState<DashboardSection>(
+    (sectionParam as DashboardSection) ?? "Dashboard",
+  );
   const [sectionQuery, setSectionQuery] = useState("");
   const [aiAgentsEnabled, setAiAgentsEnabled] = useState(() => {
     if (typeof window !== "undefined") {
@@ -802,6 +553,7 @@ function DashboardPageContent() {
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [selectedJob, setSelectedJob] = useState<string>("");
   const [allJobNames, setAllJobNames] = useState<string[]>([]);
+  const [execLogSummary, setExecLogSummary] = useState<ProjectUploadSummary | null>(null);
   const completeAnalysis = useCallback((status?: AnalysisTaskStatus) => {
     if (status) {
       setCompletedTask(status);
@@ -809,6 +561,12 @@ function DashboardPageContent() {
     setAnalysisRunning(false);
   }, []);
   const analysisId = completedTask?.analysis_id ?? searchParams.get("analysisId");
+
+  useEffect(() => {
+    if (analysisId) {
+      fetchProjectUploadSummary(analysisId).then(setExecLogSummary);
+    }
+  }, [analysisId]);
 
   useEffect(() => {
     if (analysisRunning || !analysisId) {
@@ -858,6 +616,7 @@ function DashboardPageContent() {
   const totalMasterJobs = dashboard?.summary?.total_master_jobs ?? 0;
   const totalComponents = dashboard?.summary?.metrics?.find((m) => m.label === "Total Components")?.value ?? 0;
   const disabledComponents = dashboard?.summary?.metrics?.find((m) => m.label === "Disabled Components")?.value ?? 0;
+  const activeComponents = totalComponents - disabledComponents;
   const criticalIssues =
     dashboard?.summary?.metrics?.find((metric) => metric.label === "Critical Issues")?.value ?? 0;
   const totalFindings =
@@ -976,7 +735,7 @@ function DashboardPageContent() {
               />
               <KpiCard
                 title="Active Components"
-                value={totalComponents}
+                value={activeComponents}
                 tone="cyan"
                 icon={Layers}
                 subtitle={`${disabledComponents} disabled`}
@@ -1046,6 +805,23 @@ function DashboardPageContent() {
                   title="Security findings"
                   description="Focused view of security findings, affected components, severity, evidence, and remediation recommendations."
                 />
+                <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                  <div>
+                    {selectedJob ? (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing results for <span className="font-semibold">{selectedJob}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">All jobs</p>
+                    )}
+                  </div>
+                  <JobFilter
+                    jobNames={allJobNames}
+                    selectedJob={selectedJob}
+                    onSelect={setSelectedJob}
+                    onClear={() => setSelectedJob("")}
+                  />
+                </section>
                 <AnalysisTabs
                   key={`security-findings-${sectionQuery}`}
                   lockedTab="security"
@@ -1060,10 +836,30 @@ function DashboardPageContent() {
             ) : null}
 
             {activeSection === "Performance" ? (
-              <PerformanceSection
-                op={dashboard?.operational_performance}
-                recommendations={dashboard?.recommendations?.items}
-              />
+              <>
+                <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                  <div>
+                    {selectedJob ? (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing results for <span className="font-semibold">{selectedJob}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">All jobs</p>
+                    )}
+                  </div>
+                  <JobFilter
+                    jobNames={allJobNames}
+                    selectedJob={selectedJob}
+                    onSelect={setSelectedJob}
+                    onClear={() => setSelectedJob("")}
+                  />
+                </section>
+<PerformanceView
+  op={dashboard?.operational_performance}
+  recommendations={dashboard?.recommendations?.items}
+  execLogSummary={execLogSummary}
+/>
+              </>
             ) : null}
 
             {activeSection === "Architecture" ? (
@@ -1073,6 +869,23 @@ function DashboardPageContent() {
                   title="Architecture findings"
                   description="Focused view of architecture findings, affected components, severity, evidence, and remediation recommendations."
                 />
+                <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                  <div>
+                    {selectedJob ? (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing results for <span className="font-semibold">{selectedJob}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">All jobs</p>
+                    )}
+                  </div>
+                  <JobFilter
+                    jobNames={allJobNames}
+                    selectedJob={selectedJob}
+                    onSelect={setSelectedJob}
+                    onClear={() => setSelectedJob("")}
+                  />
+                </section>
                 <AnalysisTabs
                   key={`architecture-findings-${sectionQuery}`}
                   lockedTab="security"
@@ -1093,6 +906,23 @@ function DashboardPageContent() {
                   title="Maintainability findings"
                   description="Focused view of maintainability findings, affected components, severity, evidence, and remediation recommendations."
                 />
+                <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                  <div>
+                    {selectedJob ? (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing results for <span className="font-semibold">{selectedJob}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">All jobs</p>
+                    )}
+                  </div>
+                  <JobFilter
+                    jobNames={allJobNames}
+                    selectedJob={selectedJob}
+                    onSelect={setSelectedJob}
+                    onClear={() => setSelectedJob("")}
+                  />
+                </section>
                 <AnalysisTabs
                   key={`maintainability-findings-${sectionQuery}`}
                   lockedTab="security"
@@ -1107,7 +937,26 @@ function DashboardPageContent() {
             ) : null}
 
             {activeSection === "Components" ? (
-              <ComponentsSection dashboard={dashboard} query={sectionQuery} />
+              <>
+                <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                  <div>
+                    {selectedJob ? (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing results for <span className="font-semibold">{selectedJob}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">All jobs</p>
+                    )}
+                  </div>
+                  <JobFilter
+                    jobNames={allJobNames}
+                    selectedJob={selectedJob}
+                    onSelect={setSelectedJob}
+                    onClear={() => setSelectedJob("")}
+                  />
+                </section>
+                <ComponentsSection dashboard={dashboard} query={sectionQuery} jobName={selectedJob} />
+              </>
             ) : null}
 
             {activeSection === "AI Chat" ? (
@@ -1126,6 +975,23 @@ function DashboardPageContent() {
                   title="Recommendations and remediation"
                   description="Prioritized remediation actions consolidated from the current analysis."
                 />
+                <section className="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-slate-950">
+                  <div>
+                    {selectedJob ? (
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Showing results for <span className="font-semibold">{selectedJob}</span>
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">All jobs</p>
+                    )}
+                  </div>
+                  <JobFilter
+                    jobNames={allJobNames}
+                    selectedJob={selectedJob}
+                    onSelect={setSelectedJob}
+                    onClear={() => setSelectedJob("")}
+                  />
+                </section>
                 <AnalysisTabs
                   key={`recommendation-actions-${sectionQuery}`}
                   lockedTab="recommendations"

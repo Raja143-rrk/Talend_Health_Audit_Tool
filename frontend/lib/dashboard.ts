@@ -122,6 +122,7 @@ export type OperationalPerformanceMetrics = {
   failed_jobs_count: number;
   failed_executions: FailedExecution[];
   error_groups: Record<string, string[]>;
+  has_execution_data?: boolean;
 };
 
 export type DashboardOverview = {

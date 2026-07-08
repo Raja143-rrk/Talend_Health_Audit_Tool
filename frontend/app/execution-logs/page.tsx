@@ -1,14 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence } from "framer-motion";
 import { FileIcon, UploadCloud, X } from "lucide-react";
 
+import { ParsedRecordsModal } from "@/components/execution-logs/parsed-records-modal";
+import { ParserDiagnostics } from "@/components/execution-logs/parser-diagnostics";
+import { UploadSummary } from "@/components/execution-logs/upload-summary";
 import { AppShell } from "@/components/layout/app-shell";
 import {
   fetchProjects,
   fetchUploadHistory,
   uploadExecutionLog,
   type ExecutionLogHistoryItem,
+  type ExecutionLogUploadResponse,
   type ProjectInfo,
 } from "@/lib/execution-logs";
 
@@ -37,6 +43,7 @@ function validateFile(file: File) {
 }
 
 export default function ExecutionLogsPage() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [projects, setProjects] = useState<ProjectInfo[]>([]);
   const [selectedProject, setSelectedProject] = useState<string>("");
@@ -50,6 +57,9 @@ export default function ExecutionLogsPage() {
   const [history, setHistory] = useState<ExecutionLogHistoryItem[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(true);
+  const [uploadSummary, setUploadSummary] = useState<ExecutionLogUploadResponse | null>(null);
+  const [showParsedRecords, setShowParsedRecords] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(true);
 
   const loadProjects = useCallback(async () => {
     setProjectsLoading(true);
@@ -124,11 +134,10 @@ export default function ExecutionLogsPage() {
     setError(null);
     setSuccessMessage(null);
     try {
-      await uploadExecutionLog(selectedProject, selectedProjectName, files[0], setProgress);
-      const name = files[0].name;
-      setSuccessMessage(`${name} uploaded successfully.`);
+      const response = await uploadExecutionLog(selectedProject, selectedProjectName, files[0], setProgress);
       setFiles([]);
       await loadHistory();
+      setUploadSummary(response);
     } catch (uploadError) {
       setProgress(0);
       setError(
@@ -141,8 +150,34 @@ export default function ExecutionLogsPage() {
     }
   };
 
+  const handleGoToDashboard = () => {
+    router.push(`/dashboard?analysisId=${selectedProject}&section=Performance`);
+  };
+
   return (
     <AppShell>
+      <AnimatePresence>
+        {uploadSummary && (
+          <UploadSummary
+            summary={uploadSummary}
+            onClose={() => {
+              setUploadSummary(null);
+              setShowDiagnostics(true);
+            }}
+            onGoToDashboard={handleGoToDashboard}
+            onViewRecords={() => {
+              setUploadSummary(null);
+              setShowParsedRecords(true);
+            }}
+          />
+        )}
+        {showParsedRecords && selectedProject && (
+          <ParsedRecordsModal
+            projectId={selectedProject}
+            onClose={() => setShowParsedRecords(false)}
+          />
+        )}
+      </AnimatePresence>
       <div className="space-y-6">
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950">
           <div className="border-b border-slate-200 px-6 py-5 dark:border-white/10">
@@ -300,6 +335,13 @@ export default function ExecutionLogsPage() {
             </div>
           </div>
         </section>
+
+        {uploadSummary && showDiagnostics ? (
+          <ParserDiagnostics
+            summary={uploadSummary}
+            onClear={() => setShowDiagnostics(false)}
+          />
+        ) : null}
 
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-white/10 dark:bg-slate-950">
           <div className="border-b border-slate-200 px-6 py-5 dark:border-white/10">

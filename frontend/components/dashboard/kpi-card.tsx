@@ -8,49 +8,54 @@ import { cn } from "@/lib/utils";
 
 type KpiCardProps = {
   title: string;
-  value: number;
+  value: number | string;
   suffix?: string;
   change?: string;
-  tone: "cyan" | "emerald" | "red" | "amber" | "blue" | "violet";
+  tone: "cyan" | "emerald" | "red" | "amber" | "blue" | "violet" | "slate";
   icon: LucideIcon;
   subtitle?: string;
   onClick?: () => void;
 };
 
-const toneAccent = {
+const toneAccent: Record<string, string> = {
   cyan: "from-cyan-500/20 to-cyan-600/5 border-cyan-500/30",
   emerald: "from-emerald-500/20 to-emerald-600/5 border-emerald-500/30",
   red: "from-red-500/20 to-red-600/5 border-red-500/30",
   amber: "from-amber-500/20 to-amber-600/5 border-amber-500/30",
   blue: "from-blue-500/20 to-blue-600/5 border-blue-500/30",
   violet: "from-violet-500/20 to-violet-600/5 border-violet-500/30",
+  slate: "from-slate-500/20 to-slate-600/5 border-slate-500/30",
 };
 
-const toneIconBg = {
+const toneIconBg: Record<string, string> = {
   cyan: "bg-cyan-500/15 text-cyan-600 dark:text-cyan-300",
   emerald: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
   red: "bg-red-500/15 text-red-600 dark:text-red-300",
   amber: "bg-amber-500/15 text-amber-600 dark:text-amber-300",
   blue: "bg-blue-500/15 text-blue-600 dark:text-blue-300",
   violet: "bg-violet-500/15 text-violet-600 dark:text-violet-300",
+  slate: "bg-slate-500/15 text-slate-600 dark:text-slate-300",
 };
 
-const toneGlow = {
+const toneGlow: Record<string, string> = {
   cyan: "shadow-cyan-500/10",
   emerald: "shadow-emerald-500/10",
   red: "shadow-red-500/10",
   amber: "shadow-amber-500/10",
   blue: "shadow-blue-500/10",
   violet: "shadow-violet-500/10",
+  slate: "shadow-slate-500/10",
 };
 
-function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string }) {
+function AnimatedNumber({ value, suffix = "" }: { value: number | string; suffix?: string }) {
   const motionValue = useMotionValue(0);
   const spring = useSpring(motionValue, { stiffness: 80, damping: 18 });
   const [displayValue, setDisplayValue] = useState(0);
 
   useEffect(() => {
-    motionValue.set(value);
+    if (typeof value === "number") {
+      motionValue.set(value);
+    }
   }, [motionValue, value]);
 
   useEffect(() => {
@@ -60,6 +65,10 @@ function AnimatedNumber({ value, suffix = "" }: { value: number; suffix?: string
 
     return unsubscribe;
   }, [spring]);
+
+  if (typeof value === "string") {
+    return <span>{value}</span>;
+  }
 
   return (
     <span>

@@ -1,7 +1,9 @@
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from backend.core.exceptions import AppError
+from backend.core.logging import get_logger
 from backend.schemas.dashboard import (
     AgentStatusInfo,
     AnalysisLog,
@@ -19,6 +21,9 @@ from backend.schemas.dashboard import (
     RecommendationsResponse,
 )
 from backend.services.analysis_service import AnalysisRecord, analysis_service
+
+
+logger = get_logger(__name__)
 
 
 class DashboardService:
@@ -72,27 +77,81 @@ class DashboardService:
             recommendations=self.get_recommendations(record.analysis_id, job_name),
             security_findings=self.get_security_findings(record.analysis_id, job_name),
             performance_findings=self.get_performance_findings(record.analysis_id, job_name),
-            operational_performance=self._get_operational_performance_metrics(record),
+            operational_performance=self._get_operational_performance_metrics(record, job_name),
             component_drilldown=self.get_component_drilldown(record.analysis_id, job_name),
             agents=self._get_agent_statuses(record),
         )
 
-    def _get_operational_performance_metrics(self, record: AnalysisRecord) -> OperationalPerformanceMetrics:
+    def _get_operational_performance_metrics(
+        self,
+        record: AnalysisRecord,
+        job_name: str | None = None,
+    ) -> OperationalPerformanceMetrics:
+        logger.info("=== DEBUG PERFORMANCE ===")
+        logger.info("Project Selected (analysis_id): %s", record.analysis_id)
+        logger.info("Job Name filter: %s", job_name or "none")
+
+        try:
+            from backend.execution_logs.records.service import get_execution_record_service
+            svc = get_execution_record_service()
+            exec_records = svc.get_records(record.analysis_id, job_name)
+
+            logger.info("Execution Records Loaded: %d", len(exec_records))
+
+            if exec_records:
+                logger.info("Records Used For Performance: %d", len(exec_records))
+                for rec in exec_records:
+                    logger.info("  Record: artifact=%s status=%s start=%s end=%s duration=%s",
+                                rec.artifact_name or "(empty)",
+                                rec.execution_status or "(empty)",
+                                rec.execution_start_time.isoformat()
+                                if rec.execution_start_time else "null",
+                                rec.execution_end_time.isoformat()
+                                if rec.execution_end_time else "null",
+                                rec.execution_duration_seconds
+                                if rec.execution_duration_seconds is not None else "null")
+                raw_dicts = [
+                    {
+                        "job_name": rec.job_name,
+                        "status": (rec.execution_status or "unknown").lower(),
+                        "started_at": rec.execution_start_time,
+                        "finished_at": rec.execution_end_time,
+                        "duration_seconds": rec.execution_duration_seconds,
+                        "error_message": rec.error_message or "",
+                        "execution_id": rec.plan_execution_id or rec.task_execution_id or "",
+                    }
+                    for rec in exec_records
+                    if rec.job_name
+                ]
+                logger.info("Branch: computing performance from %d raw dicts",
+                             len(raw_dicts))
+                return self._compute_performance_from_raw_dicts(raw_dicts)
+        except ImportError:
+            logger.info("Branch: ImportError, falling back to file storage")
+
+        logger.info("Branch: No execution records found, trying file storage")
         from backend.execution_logs.storage.file_storage import FileStorage
 
         storage = FileStorage()
         all_records = storage.list_all()
         logs_for_project = [r for r in all_records if r.project_id == record.analysis_id]
 
+        logger.info("File storage records: %d", len(logs_for_project))
         if logs_for_project:
+            logger.info("Branch: computing from %d file storage records",
+                        len(logs_for_project))
             try:
-                return self._compute_performance_from_logs(logs_for_project)
-            except Exception:
+                return self._compute_performance_from_logs(logs_for_project, job_name)
+            except Exception as exc:
+                logger.exception("File storage performance computation failed: %s", exc)
                 pass
 
+        logger.info("Branch: trying agent output fallback")
         perf_agent_output = self._agent_outputs(record).get("performance-agent", {})
         metrics = perf_agent_output.get("metrics", {})
         if isinstance(metrics, dict) and metrics.get("total_executions", 0) > 0:
+            logger.info("Using agent output metrics with %d executions",
+                        metrics["total_executions"])
             return OperationalPerformanceMetrics(
                 performance_score=metrics.get("performance_score", 100),
                 performance_grade=metrics.get("performance_grade", "Optimized"),
@@ -102,6 +161,7 @@ class DashboardService:
                 recurring_failures=int(metrics.get("recurring_failures", 0)),
                 average_duration_seconds=float(metrics.get("average_duration_seconds", 0.0)),
                 max_duration_seconds=float(metrics.get("max_duration_seconds", 0.0)),
+                min_duration_seconds=float(metrics.get("min_duration_seconds", 0.0)),
                 average_restart_delay_hours=float(metrics.get("average_restart_delay_hours", 0.0)),
                 total_restarts=int(metrics.get("total_restarts", 0)),
                 top_5_longest_jobs=metrics.get("top_5_longest_jobs", []),
@@ -109,16 +169,47 @@ class DashboardService:
                 failed_jobs_count=int(metrics.get("failed_jobs_count", 0)),
                 failed_executions=metrics.get("failed_executions", []),
                 error_groups=metrics.get("error_groups", {}),
+                has_execution_data=True,
             )
 
+        logger.info("Branch: No performance data found in any layer \u2014 returning empty metrics (--)")
         return OperationalPerformanceMetrics()
+
+    def _compute_performance_from_raw_dicts(self, raw_dicts: list[dict]) -> OperationalPerformanceMetrics:
+        from backend.agents.performance_agent.analyzer import PerformanceAnalyzer
+
+        if not raw_dicts:
+            logger.info("Branch: No raw dicts to compute performance from \u2014 returning empty")
+            return OperationalPerformanceMetrics()
+
+        analyzer = PerformanceAnalyzer()
+        _, _, metrics = analyzer.analyze(raw_dicts)
+
+        return OperationalPerformanceMetrics(
+            performance_score=metrics.get("performance_score", 100),
+            performance_grade=metrics.get("performance_grade", "Optimized"),
+            overall_failure_rate=float(metrics.get("overall_failure_rate", 0.0)),
+            total_executions=int(metrics.get("total_executions", 0)),
+            total_failures=int(metrics.get("total_failures", 0)),
+            recurring_failures=int(metrics.get("recurring_failures", 0)),
+            average_duration_seconds=float(metrics.get("average_duration_seconds", 0.0)),
+            max_duration_seconds=float(metrics.get("max_duration_seconds", 0.0)),
+            min_duration_seconds=float(metrics.get("min_duration_seconds", 0.0)),
+            average_restart_delay_hours=float(metrics.get("average_restart_delay_hours", 0.0)),
+            total_restarts=int(metrics.get("total_restarts", 0)),
+            top_5_longest_jobs=metrics.get("top_5_longest_jobs", []),
+            daily_trend=metrics.get("daily_trend", []),
+            failed_jobs_count=int(metrics.get("failed_jobs_count", 0)),
+            failed_executions=metrics.get("failed_executions", []),
+            error_groups=metrics.get("error_groups", {}),
+            has_execution_data=True,
+        )
 
     def _compute_performance_from_logs(
         self,
         upload_records: list,
+        job_name: str | None = None,
     ) -> OperationalPerformanceMetrics:
-        from backend.agents.performance_agent.analyzer import PerformanceAnalyzer
-
         raw_dicts: list[dict] = []
         cutoff = datetime.now(timezone.utc) - timedelta(days=10)
 
@@ -143,29 +234,10 @@ class DashboardService:
                     "execution_id": entry.execution_id or "",
                 })
 
-        if not raw_dicts:
-            return OperationalPerformanceMetrics()
+        if job_name:
+            raw_dicts = [d for d in raw_dicts if d["job_name"] == job_name]
 
-        analyzer = PerformanceAnalyzer()
-        _, _, metrics = analyzer.analyze(raw_dicts)
-
-        return OperationalPerformanceMetrics(
-            performance_score=metrics.get("performance_score", 100),
-            performance_grade=metrics.get("performance_grade", "Optimized"),
-            overall_failure_rate=float(metrics.get("overall_failure_rate", 0.0)),
-            total_executions=int(metrics.get("total_executions", 0)),
-            total_failures=int(metrics.get("total_failures", 0)),
-            recurring_failures=int(metrics.get("recurring_failures", 0)),
-            average_duration_seconds=float(metrics.get("average_duration_seconds", 0.0)),
-            max_duration_seconds=float(metrics.get("max_duration_seconds", 0.0)),
-            average_restart_delay_hours=float(metrics.get("average_restart_delay_hours", 0.0)),
-            total_restarts=int(metrics.get("total_restarts", 0)),
-            top_5_longest_jobs=metrics.get("top_5_longest_jobs", []),
-            daily_trend=metrics.get("daily_trend", []),
-            failed_jobs_count=int(metrics.get("failed_jobs_count", 0)),
-            failed_executions=metrics.get("failed_executions", []),
-            error_groups=metrics.get("error_groups", {}),
-        )
+        return self._compute_performance_from_raw_dicts(raw_dicts)
 
     def get_dashboard_summary(
         self,
@@ -191,6 +263,13 @@ class DashboardService:
             subjob_names = [n for n in subjob_names if n == job_name]
             master_job_names = [n for n in master_job_names if n == job_name]
             kpis = self._filtered_kpis(record, job_name, kpis)
+        else:
+            total, active, disabled = self._get_all_component_counts(record)
+            kpi_map = {str(kpi.get("label")): dict(kpi) for kpi in kpis}
+            kpi_map["Total Components"] = {"label": "Total Components", "value": total, "severity": "informational"}
+            kpi_map["Active Components"] = {"label": "Active Components", "value": active, "severity": "informational"}
+            kpi_map["Disabled Components"] = {"label": "Disabled Components", "value": disabled, "severity": "informational"}
+            kpis = list(kpi_map.values())
 
         return DashboardSummaryResponse(
             project_name=str(dashboard.get("project_name") or "Talend Health Analyzer"),
@@ -221,10 +300,18 @@ class DashboardService:
             security_findings = [f for f in security_findings if self._finding_job_name(f) == job_name]
             performance_findings = [f for f in performance_findings if self._finding_job_name(f) == job_name]
 
+        all_comps = self._get_inventory_components(record, job_name)
+        active_comps = [c for c in all_comps if not c.get("disabled", False)]
+        disabled_comps = [c for c in all_comps if c.get("disabled", False)]
+        _name = lambda c: str(c.get("component_name") or c.get("name") or "unknown")
+        component_distribution = [ChartPoint(name=n, value=v) for n, v in Counter(_name(c) for c in all_comps).most_common()]
+        active_component_distribution = [ChartPoint(name=n, value=v) for n, v in Counter(_name(c) for c in active_comps).most_common()]
+        disabled_component_distribution = [ChartPoint(name=n, value=v) for n, v in Counter(_name(c) for c in disabled_comps).most_common()]
+
         return ChartDataResponse(
-            component_distribution=self._chart_points(charts.get("component_distribution", [])),
-            active_component_distribution=self._chart_points(charts.get("active_component_distribution", [])),
-            disabled_component_distribution=self._chart_points(charts.get("disabled_component_distribution", [])),
+            component_distribution=component_distribution,
+            active_component_distribution=active_component_distribution,
+            disabled_component_distribution=disabled_component_distribution,
             performance_issues=self._issue_chart_points(performance_findings),
             security_issues=self._issue_chart_points(security_findings),
             source_target_systems=self._chart_points(
@@ -279,6 +366,21 @@ class DashboardService:
         recommendations = self.get_recommendations(record.analysis_id, job_name).items
         grouped: dict[tuple[str, str, str], ComponentDrillDown] = {}
 
+        all_comps = self._get_inventory_components(record, job_name)
+        for comp in all_comps:
+            cname = str(comp.get("name") or comp.get("component_name") or "unknown")
+            ctype = str(comp.get("component_name") or "unknown")
+            if cname == ctype:
+                continue
+            jn = comp.get("_job_name", "unknown")
+            key = (jn, cname, ctype)
+            if key not in grouped:
+                grouped[key] = ComponentDrillDown(
+                    job_name=jn,
+                    component_name=cname,
+                    component_type=ctype,
+                )
+
         for finding in findings:
             key = (finding.job_name, finding.component_name, finding.component_type)
             drilldown = grouped.setdefault(
@@ -310,7 +412,7 @@ class DashboardService:
             drilldown.recommendations.append(recommendation)
 
         return sorted(
-            grouped.values(),
+            [v for v in grouped.values() if v.component_name != v.component_type],
             key=lambda item: (item.job_name, item.component_name, item.component_type),
         )
 
@@ -597,16 +699,79 @@ class DashboardService:
             1 for f in all_filtered
             if str(f.get("severity") or "").lower() in {"critical", "critical_risk"}
         )
+        total_components, active_components, disabled_components = self._get_job_component_counts(record, job_name)
         kpi_map = {str(kpi.get("label")): dict(kpi) for kpi in original_kpis}
         kpi_map["Total Jobs"] = {"label": "Total Jobs", "value": 1, "severity": "informational"}
         kpi_map["Critical Issues"] = {"label": "Critical Issues", "value": critical_count, "severity": "critical_risk" if critical_count else "informational"}
         kpi_map["Security Findings"] = {"label": "Security Findings", "value": len(security_payloads), "severity": "warning" if security_payloads else "informational"}
         kpi_map["Performance Findings"] = {"label": "Performance Findings", "value": len(performance_payloads), "severity": "warning" if performance_payloads else "informational"}
+        kpi_map["Total Components"] = {"label": "Total Components", "value": total_components, "severity": "informational"}
+        kpi_map["Active Components"] = {"label": "Active Components", "value": active_components, "severity": "informational"}
+        kpi_map["Disabled Components"] = {"label": "Disabled Components", "value": disabled_components, "severity": "informational"}
         return list(kpi_map.values())
+
+    def _get_all_component_counts(self, record) -> tuple[int, int, int]:
+        all_comps = self._get_inventory_components(record, None)
+        total = len(all_comps)
+        disabled = sum(1 for c in all_comps if c.get("disabled", False))
+        active = max(0, total - disabled)
+        return (total, active, disabled)
+
+    def _get_job_component_counts(self, record, job_name: str) -> tuple[int, int, int]:
+        all_comps = self._get_inventory_components(record, job_name)
+        total = len(all_comps)
+        disabled = sum(1 for c in all_comps if c.get("disabled", False))
+        active = max(0, total - disabled)
+        return (total, active, disabled)
+
+    def _get_inventory_components(self, record, job_name: str | None) -> list[dict]:
+        metadata = self._metadata(record)
+        inventory = metadata.get("talend_inventory", {})
+        if not isinstance(inventory, dict):
+            return []
+        jobs = inventory.get("jobs", [])
+        if not isinstance(jobs, list):
+            return []
+        result: list[dict] = []
+        for job in jobs:
+            if not isinstance(job, dict):
+                continue
+            jn = job.get("name", "unknown")
+            if job_name and jn != job_name:
+                continue
+            comps = job.get("components", [])
+            if not isinstance(comps, list):
+                continue
+            for comp in comps:
+                if not isinstance(comp, dict):
+                    continue
+                entry = dict(comp)
+                entry["_job_name"] = jn
+                result.append(entry)
+        return result
 
     def _finding_job_name(self, value: dict[str, Any]) -> str:
         evidence = value.get("evidence") or {}
         return str(value.get("job_name") or evidence.get("job_name") or evidence.get("job") or "unknown")
+
+    def _finding_component_type(self, value: dict[str, Any]) -> str:
+        evidence = value.get("evidence") or {}
+        return str(
+            value.get("component_type")
+            or evidence.get("component_type")
+            or evidence.get("component_name")
+            or "unknown"
+        )
+
+    def _finding_component_name(self, value: dict[str, Any]) -> str:
+        evidence = value.get("evidence") or {}
+        return str(
+            value.get("component_name")
+            or evidence.get("component")
+            or evidence.get("component_name")
+            or evidence.get("target")
+            or "unknown"
+        )
 
     def _finding_recommendation(self, value: dict[str, Any]) -> str:
         evidence = value.get("evidence") or {}

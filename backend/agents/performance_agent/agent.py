@@ -119,20 +119,41 @@ class PerformanceAgent(BaseAgent):
         }
 
     def _resolve_execution_logs(self, context: AgentContext) -> list[dict] | None:
-        from backend.execution_logs.storage.file_storage import FileStorage
-
         metadata_logs = context.metadata.get("execution_logs")
         if metadata_logs:
             return metadata_logs
 
+        project_id = context.analysis_id
+        raw_dicts: list[dict] = []
+
+        try:
+            from backend.execution_logs.records.service import get_execution_record_service
+            svc = get_execution_record_service()
+            exec_records = svc.get_records(project_id)
+            if exec_records:
+                for rec in exec_records:
+                    raw_dicts.append({
+                        "job_name": rec.job_name or "unknown",
+                        "status": (rec.execution_status or "unknown").lower(),
+                        "started_at": rec.execution_start_time,
+                        "finished_at": rec.execution_end_time,
+                        "duration_seconds": rec.execution_duration_seconds,
+                        "error_message": rec.error_message or "",
+                        "execution_id": rec.plan_execution_id or rec.task_execution_id or "",
+                    })
+                return raw_dicts if raw_dicts else None
+        except ImportError:
+            pass
+
+        from backend.execution_logs.storage.file_storage import FileStorage
+
         storage = FileStorage()
         all_records = storage.list_all()
-        project_records = [r for r in all_records if r.project_id == context.analysis_id]
+        project_records = [r for r in all_records if r.project_id == project_id]
 
         if not project_records:
             return None
 
-        raw_dicts: list[dict] = []
         for upload_rec in project_records:
             for entry in upload_rec.entries:
                 started_at = entry.start_time if hasattr(entry, "start_time") else getattr(entry, "started_at", None)
